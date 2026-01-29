@@ -252,14 +252,28 @@ require_role(['hr', 'department_head', 'employee']);
             <button id="export-excel" style="padding: 10px 16px; background: #10b981; color: #fff; border: none; border-radius: 8px; cursor: pointer; font-weight: 600; font-family: 'Poppins', sans-serif;">
                 <i class="fas fa-file-excel"></i> Export Excel
             </button>
+            <?php if (function_exists('has_role') && has_role('hr')): ?>
+                <?php
+                    $canXlsx = false;
+                    $autoload = __DIR__ . '/../vendor/autoload.php';
+                    if (file_exists($autoload)) {
+                        require_once $autoload;
+                        $canXlsx = class_exists('\\PhpOffice\\PhpSpreadsheet\\IOFactory');
+                    }
+                ?>
+                <button id="import-excel" style="padding: 10px 16px; background: #22c55e; color: #fff; border: none; border-radius: 8px; cursor: pointer; font-weight: 600; font-family: 'Poppins', sans-serif;">
+                    <i class="fas fa-file-upload"></i> Import Excel
+                </button>
+                <input type="file" id="import-excel-input" accept="<?= $canXlsx ? '.xls,.xlsx,.csv' : '.csv' ?>" style="display: none;" />
+            <?php endif; ?>
             <button id="expand-all-btn" style="padding: 10px 16px; background: #8b5cf6; color: #fff; border: none; border-radius: 8px; cursor: pointer; font-weight: 600; font-family: 'Poppins', sans-serif; display: none;">
                 <i class="fas fa-expand-alt"></i> Expand All
             </button>
         </div>
 
         <div style="background: #fff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.08);">
-        <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: #fff; padding: 16px 24px; display: flex; justify-content: space-between; align-items: center;\">
-                <h2 style=\"font-size: 20px; margin: 0;\"><i class=\"fas fa-table\"></i> Attendance Records</h2>
+        <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: #fff; padding: 16px 24px; display: flex; justify-content: space-between; align-items: center;">
+            <h2 style="font-size: 20px; margin: 0;"><i class="fas fa-table"></i> Attendance Records</h2>
                 <div id="filter-info" style="font-size: 13px; opacity: 0.9;"></div>
             </div>
             <div style="overflow-x: auto;">
@@ -283,6 +297,11 @@ require_role(['hr', 'department_head', 'employee']);
         </div>
     </div>
 
+    <?php if (function_exists('has_role') && has_role('hr')): ?>
+    <script>
+        window.CAN_XLSX = <?= (isset($canXlsx) && $canXlsx) ? 'true' : 'false' ?>;
+    </script>
+    <?php endif; ?>
     <script>
         let currentRecords = [];
         let statusFilter = 'all';
@@ -390,11 +409,11 @@ require_role(['hr', 'department_head', 'employee']);
                     currentRecords = data.records;
                     renderRecords(currentRecords);
                 } else {
-                    document.getElementById('records-tbody').innerHTML = '<tr><td colspan="7" style="text-align: center; padding: 40px; color: #ef4444;"><i class="fas fa-exclamation-triangle"></i> Error: ' + (data.error || 'Failed to load') + '</td></tr>';
+                    document.getElementById('records-tbody').innerHTML = '<tr><td colspan="8" style="text-align: center; padding: 40px; color: #ef4444;"><i class="fas fa-exclamation-triangle"></i> Error: ' + (data.error || 'Failed to load') + '</td></tr>';
                 }
             } catch(err) {
                 console.error('Records fetch error:', err);
-                document.getElementById('records-tbody').innerHTML = '<tr><td colspan="7" style="text-align: center; padding: 40px; color: #ef4444;"><i class="fas fa-exclamation-triangle"></i> Connection error. Please check if the database is running.</td></tr>';
+                document.getElementById('records-tbody').innerHTML = '<tr><td colspan="8" style="text-align: center; padding: 40px; color: #ef4444;"><i class="fas fa-exclamation-triangle"></i> Connection error. Please check if the database is running.</td></tr>';
             }
         }
 
@@ -649,6 +668,50 @@ require_role(['hr', 'department_head', 'employee']);
         });
         document.getElementById('export-csv').addEventListener('click', exportCSV);
         document.getElementById('export-excel').addEventListener('click', exportExcel);
+        
+        // Import Excel button and input (only present for HR)
+        const importBtn = document.getElementById('import-excel');
+        const importInput = document.getElementById('import-excel-input');
+        if (importBtn && importInput) {
+            importBtn.addEventListener('click', function(){
+                importInput.click();
+            });
+            importInput.addEventListener('change', async function(){
+                if(!this.files || this.files.length === 0) return;
+                const file = this.files[0];
+                const extAllowed = (window.CAN_XLSX ? ['xls','xlsx','csv'] : ['csv']);
+                const ext = file.name.split('.').pop().toLowerCase();
+                if(!extAllowed.includes(ext)){
+                    const msg = window.CAN_XLSX
+                        ? 'Please select a valid Excel/CSV file (.xls, .xlsx, .csv).'
+                        : 'XLS/XLSX import requires PhpSpreadsheet. Please upload a CSV file or ask to install PhpSpreadsheet.';
+                    alert(msg);
+                    this.value = '';
+                    return;
+                }
+                importBtn.disabled = true;
+                importBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Uploading...';
+                try {
+                    const fd = new FormData();
+                    fd.append('file', file);
+                    const res = await fetch('import_attendance.php', { method: 'POST', body: fd });
+                    const data = await res.json();
+                    if(data.success){
+                        alert(data.message || 'Upload successful. File saved.');
+                        loadRecords();
+                    } else {
+                        alert('Import failed: ' + (data.error || 'Unknown error'));
+                    }
+                } catch(err){
+                    console.error('Import error:', err);
+                    alert('Connection error while importing.');
+                } finally {
+                    importBtn.disabled = false;
+                    importBtn.innerHTML = '<i class="fas fa-file-upload"></i> Import Excel';
+                    this.value = '';
+                }
+            });
+        }
         
         // Expand/Collapse all button
         let allExpanded = false;

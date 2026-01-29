@@ -512,6 +512,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const data = window.SERVER_ATTENDANCE || { user: {}, attendance: [], summary: {} };
     const attendanceRecords = data.attendance || [];
     const summary = data.summary || {};
+    let lastFetchTs = Date.now();
     
     // Filter state
     let currentFilterType = 'day';
@@ -715,6 +716,55 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
     }
+
+    // Live refresh: fetch latest attendance periodically
+    async function fetchLatestAttendance() {
+        try {
+            const res = await fetch('../api/employee_attendance.php', { cache: 'no-store' });
+            const json = await res.json();
+            if (!json || !json.success) return;
+
+            // Update data structures
+            attendanceRecords.length = 0;
+            (json.attendance || []).forEach(r => attendanceRecords.push(r));
+
+            // Re-apply current filter
+            const dateFilter = document.getElementById('dateFilter').value;
+            const monthFilter = document.getElementById('monthFilter').value;
+            const yearFilter = document.getElementById('yearFilter').value;
+            if (currentFilterType === 'day' && dateFilter) {
+                filteredRecords = attendanceRecords.filter(rec => rec.date === dateFilter);
+            } else if (currentFilterType === 'month' && monthFilter) {
+                filteredRecords = attendanceRecords.filter(rec => rec.date.substring(0, 7) === monthFilter);
+            } else if (currentFilterType === 'year' && yearFilter) {
+                filteredRecords = attendanceRecords.filter(rec => rec.date.substring(0, 4) === yearFilter);
+            } else {
+                filteredRecords = [...attendanceRecords];
+            }
+
+            // Update summary widgets
+            const rateEl = document.getElementById('overallRate');
+            if (rateEl && json.summary && typeof json.summary.attendanceRate !== 'undefined') {
+                rateEl.textContent = json.summary.attendanceRate + '%';
+            }
+
+            // Re-render table and charts
+            renderDailyRecords();
+            renderCharts();
+            lastFetchTs = Date.now();
+        } catch (e) {
+            // Silently ignore fetch errors
+        }
+    }
+
+    // Poll every 10s for updates
+    const POLL_MS = 10000;
+    setInterval(fetchLatestAttendance, POLL_MS);
+    // Also refresh on tab focus
+    window.addEventListener('focus', () => {
+        // Avoid spamming if interval just ran
+        if (Date.now() - lastFetchTs > 3000) fetchLatestAttendance();
+    });
 
     // Details modal
     const detailsModal = document.getElementById('attendance-details-modal');
@@ -1090,6 +1140,8 @@ document.addEventListener('DOMContentLoaded', () => {
     // Initial render
     renderDailyRecords();
     renderCharts();
+    // Initial fetch to sync with any recent imports
+    fetchLatestAttendance();
 });
 </script>
 
