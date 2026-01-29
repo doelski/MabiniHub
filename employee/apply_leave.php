@@ -129,6 +129,7 @@ require_role('employee');
         <div
           id="leave-cards"
           class="flex gap-6 overflow-x-auto pb-4 -mx-2 px-2"
+          style="opacity: 0; transition: opacity 0.3s ease-in-out;"
         >
           <!-- Card: Vacation Leave -->
           <a
@@ -790,23 +791,29 @@ require_role('employee');
     <script>
       // Fetch live leave credits and update the cards (show Insufficient state)
       (function () {
-        // Helper: try localStorage first, then fall back to server session via API
+        // Helper: ALWAYS fetch from API first to ensure fresh data
         async function resolveUserEmail() {
           try {
-            const local = localStorage.getItem("userEmail");
-            if (local && local.trim() !== "") return local.trim();
-            // Ask server for current logged-in user (session)
+            // ALWAYS fetch from API first to ensure fresh data
             const r = await fetch("../api/current_user.php");
-            if (!r.ok) return "";
+            if (!r.ok) {
+              console.error('[EMPLOYEE] Failed to fetch current user:', r.status);
+              return "";
+            }
             const js = await r.json();
             if (js && js.logged_in && js.email) {
+              console.log('[EMPLOYEE] API returned email:', js.email);
               try {
+                // Update localStorage with fresh email
                 localStorage.setItem("userEmail", js.email);
-              } catch (e) {}
+              } catch (e) {
+                console.error('[EMPLOYEE] Failed to set localStorage:', e);
+              }
               return js.email;
             }
+            console.error('[EMPLOYEE] API returned invalid data:', js);
           } catch (e) {
-            // ignore and return empty
+            console.error('[EMPLOYEE] Exception in resolveUserEmail:', e);
           }
           return "";
         }
@@ -822,6 +829,56 @@ require_role('employee');
         (async function loadCredits() {
           const email = await resolveUserEmail();
           if (!email) return; // nothing to do if not logged in
+
+          // Check if user can apply for leave
+          let canApplyLeave = true;
+          try {
+            const statusResp = await fetch(`../api/get_employee_leave_status.php?email=${encodeURIComponent(email)}`);
+            const statusData = await statusResp.json();
+            if (statusData && statusData.success) {
+              canApplyLeave = statusData.data.can_apply_leave === 1;
+            }
+          } catch (e) {
+            console.error("Failed to fetch leave application status", e);
+          }
+
+          // If user cannot apply for leave, show warning and disable all cards
+          if (!canApplyLeave) {
+            const container = document.getElementById('leave-cards');
+            if (container) {
+              // Add a notice at the top
+              const notice = document.createElement('div');
+              notice.className = 'col-span-full mb-6 p-4 bg-red-50 border-l-4 border-red-500 text-red-700 rounded';
+              notice.innerHTML = `
+                <div class="flex items-center gap-3">
+                  <i class="fas fa-exclamation-triangle text-2xl"></i>
+                  <div>
+                    <p class="font-semibold">Leave Application Disabled</p>
+                    <p class="text-sm">Your ability to apply for leave has been disabled by HR. Please contact HR for more information.</p>
+                  </div>
+                </div>
+              `;
+              container.parentElement.insertBefore(notice, container);
+            }
+
+            // Disable all leave application cards
+            document.querySelectorAll("#leave-cards a[data-leavetype]").forEach((card) => {
+              const btn = card.querySelector("button");
+              if (btn) {
+                btn.textContent = "Disabled";
+                btn.disabled = true;
+                btn.classList.remove("bg-blue-600", "hover:bg-blue-700");
+                btn.classList.add("bg-gray-400", "text-gray-700", "cursor-not-allowed");
+              }
+              card.addEventListener("click", (ev) => {
+                ev.preventDefault();
+                alert('Leave application is currently disabled. Please contact HR.');
+              });
+              card.style.opacity = '0.6';
+              card.style.pointerEvents = 'none';
+            });
+            // Continue to load actual leave credits (no return here!)
+          }
 
           // Fetch current user info to get gender
           let userGender = null;
@@ -923,6 +980,12 @@ require_role('employee');
               });
           } catch (err) {
             console.error("Failed to load leave credits", err);
+          }
+          
+          // Show cards after data is loaded
+          const cardsContainer = document.getElementById('leave-cards');
+          if (cardsContainer) {
+            cardsContainer.style.opacity = '1';
           }
         })();
       })();

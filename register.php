@@ -16,6 +16,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $email = trim($_POST['email'] ?? '');
     $password = $_POST['password'] ?? '';
     $confirm = $_POST['confirm_password'] ?? '';
+    $employee_id = trim($_POST['employee_id'] ?? '');
+    $gender = trim($_POST['gender'] ?? '');
 
     // Server-side validations
     $nameRegex = "/^[A-Za-z\s\-']+$/"; // letters, spaces, hyphen, apostrophe
@@ -38,7 +40,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $error = 'Passwords do not match.';
     } elseif (strlen($password) < 6) {
         $error = 'Password must be at least 6 characters.';
-    } elseif (empty($department) || empty($lastname) || empty($firstname) || empty($position) || empty($email)) {
+    } elseif (empty($department) || empty($lastname) || empty($firstname) || empty($position) || empty($email) || empty($employee_id)) {
         $error = 'Please fill in all required fields.';
     } else {
         // Ensure position is one of the allowed employment categories
@@ -61,19 +63,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if ($stmt->fetch()) {
                 $error = 'Email already registered.';
             } else {
-                $hash = password_hash($password, PASSWORD_DEFAULT);
-                // All new accounts require super admin approval: set status to 'pending'
-                $pendingStatus = 'pending';
-                
-                // Generate unique employee_id via centralized helper (EMPYYYY-####)
-                $employee_id = getNextEmployeeId($pdo);
-
-                // Note: per-user QR codes are retired. We still generate an employee_id here.
-                $stmt = $pdo->prepare('INSERT INTO users (email, password, department, lastname, firstname, mi, position, role, contact_no, status, employee_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
-                if ($stmt->execute([$email, $hash, $department, $lastname, $firstname, $mi, $position, $role, $contact_no, $pendingStatus, $employee_id])) {
-                    $success = 'Registration submitted! Your Employee ID: <strong>' . $employee_id . '</strong>. Awaiting super admin approval.';
+                // Check if employee_id is already taken
+                $stmt = $pdo->prepare('SELECT id FROM users WHERE employee_id = ?');
+                $stmt->execute([$employee_id]);
+                if ($stmt->fetch()) {
+                    $error = 'Employee ID already exists. Please use a unique ID.';
                 } else {
-                    $error = 'Registration failed. Please try again.';
+                    $hash = password_hash($password, PASSWORD_DEFAULT);
+                    // All new accounts require super admin approval: set status to 'pending'
+                    $pendingStatus = 'pending';
+
+                    $stmt = $pdo->prepare('INSERT INTO users (email, password, department, lastname, firstname, mi, position, role, contact_no, status, employee_id, gender) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
+                    if ($stmt->execute([$email, $hash, $department, $lastname, $firstname, $mi, $position, $role, $contact_no, $pendingStatus, $employee_id, $gender])) {
+                        $success = 'Registration submitted! Your Employee ID: <strong>' . $employee_id . '</strong>. Awaiting super admin approval.';
+                    } else {
+                        $error = 'Registration failed. Please try again.';
+                    }
                 }
             }
             }
@@ -382,8 +387,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             </select>
                         </div>
                         <div class="input-block">
+                            <label for="employee_id" class="input-label">Employee ID</label>
+                            <input type="text" name="employee_id" id="employee_id" placeholder="e.g., EMP2025-0001" required pattern="[A-Za-z0-9\-]+" title="Enter unique Employee ID">
+                        </div>
+                        <div class="input-block">
                             <label for="contact_no" class="input-label">Contact No.</label>
                             <input type="text" name="contact_no" id="contact_no" placeholder="09XXXXXXXXX" inputmode="numeric" pattern="09[0-9]{9}" maxlength="11" title="Must start with 09 and be 11 digits" oninput="this.value=this.value.replace(/[^0-9]/g,'')">
+                        </div>
+                        <div class="input-block">
+                            <label for="gender" class="input-label">Gender</label>
+                            <select name="gender" id="gender" required>
+                                <option value="">Select Gender</option>
+                                <option value="M">Male</option>
+                                <option value="F">Female</option>
+                            </select>
                         </div>
                         <div class="modal-buttons">
                             <button type="button" class="input-button" id="prev-2">Back</button>
@@ -462,8 +479,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             const dept = document.getElementById('department').value;
             const pos = document.getElementById('position').value;
             const role = document.getElementById('role').value;
+            const empId = document.getElementById('employee_id').value.trim();
+            const gender = document.getElementById('gender').value;
             const phone = document.getElementById('contact_no').value.trim();
-            if (!dept || !pos || !role) { showClientError('Please select department, position, and role.'); return; }
+            if (!dept || !pos || !role || !empId || !gender) { showClientError('Please fill in all required fields in Step 2.'); return; }
             if (phone && !phoneRegex.test(phone)) { showClientError('Contact number must start with 09 and be 11 digits.'); return; }
             // Additional client-side check: only one Department Head per department
             if (role === 'department_head') {
@@ -512,6 +531,56 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             confirmToggle.classList.toggle('fa-eye');
             confirmToggle.classList.toggle('fa-eye-slash');
         });
+
+        // Position-based role filtering
+        const positionSelect = document.getElementById('position');
+        const roleSelect = document.getElementById('role');
+        
+        function filterRoles() {
+            const position = positionSelect.value;
+            const roleOptions = roleSelect.querySelectorAll('option');
+            
+            if (position === 'OJT' || position === 'JO') {
+                // JO/OJT can only be Employee
+                roleOptions.forEach(opt => {
+                    if (opt.value === 'employee') {
+                        opt.style.display = '';
+                        opt.disabled = false;
+                    } else {
+                        opt.style.display = 'none';
+                        opt.disabled = true;
+                    }
+                });
+                roleSelect.value = 'employee';
+                roleSelect.disabled = true;
+            } else if (position === 'Casual') {
+                // Casual can be Employee or Department Head (NO HR)
+                roleOptions.forEach(opt => {
+                    if (opt.value === 'employee' || opt.value === 'department_head') {
+                        opt.style.display = '';
+                        opt.disabled = false;
+                    } else if (opt.value === 'hr') {
+                        opt.style.display = 'none';
+                        opt.disabled = true;
+                    }
+                });
+                // Reset to employee if currently selected role is hr
+                if (roleSelect.value === 'hr') {
+                    roleSelect.value = 'employee';
+                }
+                roleSelect.disabled = false;
+            } else if (position === 'Permanent') {
+                // Permanent can be any role
+                roleOptions.forEach(opt => {
+                    opt.style.display = '';
+                    opt.disabled = false;
+                });
+                roleSelect.disabled = false;
+            }
+        }
+        
+        positionSelect.addEventListener('change', filterRoles);
+        filterRoles();
 
         // Email verification logic
         const sendCodeBtn = document.getElementById('send-code-btn');

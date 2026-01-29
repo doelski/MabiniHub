@@ -856,7 +856,7 @@
               const department = card.dataset.department;
               const email = card.dataset.email;
               let modalContent = `
-                <div class="modal-content">
+                <div class="modal-content" style="max-width: 1200px;">
                   <button class="modal-close-btn">&times;</button>
                   <div class="modal-profile-header">
                     <img src="${
@@ -866,6 +866,17 @@
                     }" alt="${name}">
                     <h4>${name}</h4>
                     <p class="employee-details">${position} - ${department}</p>
+                    
+                    <!-- Leave Application Toggle -->
+                    <div style="margin-top: 1rem; display: flex; align-items: center; justify-content: center; gap: 0.75rem; padding: 0.75rem; background: #f8fafc; border-radius: 0.5rem; border: 1px solid #e2e8f0;">
+                      <i class="fas fa-calendar-check" style="color: #3b82f6;"></i>
+                      <span style="font-size: 0.9rem; font-weight: 600; color: #1e293b;">Leave Application:</span>
+                      <label class="toggle-switch" style="position: relative; display: inline-block; width: 50px; height: 26px; margin: 0;">
+                        <input type="checkbox" id="leaveToggle" data-email="${email}" style="opacity: 0; width: 0; height: 0;">
+                        <span class="toggle-slider" style="position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #cbd5e1; border-radius: 26px; transition: 0.3s;"></span>
+                      </label>
+                      <span id="toggleStatus" style="font-size: 0.85rem; font-weight: 600; min-width: 70px;">Loading...</span>
+                    </div>
                   </div>
                   
                   <div class="modal-leave-credits">
@@ -876,7 +887,26 @@
                       </div>
                     </div>
                   </div>
-                </div>`;
+                </div>
+                <style>
+                  .toggle-switch input:checked + .toggle-slider {
+                    background-color: #10b981 !important;
+                  }
+                  .toggle-switch .toggle-slider:before {
+                    position: absolute;
+                    content: "";
+                    height: 20px;
+                    width: 20px;
+                    left: 3px;
+                    bottom: 3px;
+                    background-color: white;
+                    border-radius: 50%;
+                    transition: 0.3s;
+                  }
+                  .toggle-switch input:checked + .toggle-slider:before {
+                    transform: translateX(24px);
+                  }
+                </style>`;
               modalOverlay.innerHTML = modalContent;
               modalOverlay.classList.add("show");
               let closeButton = modalOverlay.querySelector(".modal-close-btn");
@@ -894,6 +924,50 @@
                   }, 300);
                 }
               });
+
+              // Fetch and set leave application toggle status
+              fetch(`../api/get_employee_leave_status.php?email=${encodeURIComponent(email)}`)
+                .then(r => r.json())
+                .then(data => {
+                  if (data.success) {
+                    const toggle = document.getElementById('leaveToggle');
+                    const status = document.getElementById('toggleStatus');
+                    if (toggle && status) {
+                      const canApply = data.data.can_apply_leave === 1;
+                      toggle.checked = canApply;
+                      status.textContent = canApply ? 'Enabled' : 'Disabled';
+                      status.style.color = canApply ? '#10b981' : '#ef4444';
+                      
+                      // Add toggle change handler
+                      toggle.addEventListener('change', async function() {
+                        const newStatus = this.checked ? 1 : 0;
+                        try {
+                          const response = await fetch('../api/hr_toggle_leave_application.php', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                              employee_email: email,
+                              can_apply_leave: newStatus
+                            })
+                          });
+                          const result = await response.json();
+                          if (result.success) {
+                            status.textContent = newStatus ? 'Enabled' : 'Disabled';
+                            status.style.color = newStatus ? '#10b981' : '#ef4444';
+                            alert(newStatus ? 'Employee can now apply for leave' : 'Employee cannot apply for leave');
+                          } else {
+                            alert('Error: ' + result.error);
+                            this.checked = !newStatus; // Revert
+                          }
+                        } catch (err) {
+                          alert('Failed to update leave application status');
+                          this.checked = !newStatus; // Revert
+                        }
+                      });
+                    }
+                  }
+                })
+                .catch(err => console.error('Failed to fetch leave status', err));
 
               // Fetch leave credits for selected employee
               fetch(
@@ -939,7 +1013,13 @@
                     div.innerHTML = `
                       <div class="flex items-start justify-between w-full">
                         <span class="${titleSize} font-semibold text-gray-900 break-words leading-snug pr-4 min-w-0">${it.type}</span>
-                        <span class="text-[11px] px-2.5 py-1 rounded-full bg-gray-100 text-gray-700 border border-gray-200 whitespace-nowrap shrink-0">${total} days</span>
+                        <div class="flex items-center gap-2 shrink-0">
+                          <span class="text-[11px] px-2.5 py-1 rounded-full bg-gray-100 text-gray-700 border border-gray-200 whitespace-nowrap">${total} days</span>
+                          <button class="edit-leave-btn" data-type="${it.type}" data-total="${total}" data-email="${email}" style="background: #3b82f6; color: white; border: none; padding: 0.375rem 0.625rem; border-radius: 0.375rem; cursor: pointer; font-size: 0.75rem; font-weight: 600; transition: all 0.2s; display: flex; align-items: center; gap: 0.25rem;" title="Edit ${it.type}">
+                            <i class="fas fa-edit" style="font-size: 0.7rem;"></i>
+                            Edit
+                          </button>
+                        </div>
                       </div>
                       <div class="w-full mt-1 flex items-center gap-4 md:gap-6 flex-wrap justify-between flex-1">
                         <div class="relative w-24 h-24 shrink-0 mx-auto sm:mx-0 p-1">
@@ -1019,6 +1099,63 @@
                             tooltip: { enabled: false },
                           },
                         },
+                      });
+                    }
+                    
+                    // Add edit button handler
+                    const editBtn = div.querySelector('.edit-leave-btn');
+                    if (editBtn) {
+                      editBtn.addEventListener('click', async function(e) {
+                        e.stopPropagation();
+                        const leaveType = this.dataset.type;
+                        const currentTotal = this.dataset.total;
+                        const employeeEmail = this.dataset.email;
+                        
+                        const newCredits = prompt(`Edit ${leaveType}\n\nCurrent Total: ${currentTotal} days\nEnter new total (in days):`, currentTotal);
+                        
+                        if (newCredits === null) return; // User cancelled
+                        
+                        const credits = parseFloat(newCredits);
+                        if (isNaN(credits) || credits < 0) {
+                          alert('Please enter a valid non-negative number');
+                          return;
+                        }
+                        
+                        try {
+                          const response = await fetch('../api/hr_update_leave_credits.php', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                              employee_email: employeeEmail,
+                              leave_type: leaveType,
+                              new_credits: credits
+                            })
+                          });
+                          
+                          const result = await response.json();
+                          if (result.success) {
+                            alert(`Successfully updated ${leaveType} to ${credits} days`);
+                            // Refresh the leave credits display
+                            const leaveGridDiv = modalOverlay.querySelector("#leaveGrid > div");
+                            leaveGridDiv.innerHTML = '<div class="text-center text-gray-500 p-4">Refreshing leave credits...</div>';
+                            
+                            // Re-fetch and display leave credits
+                            fetch(`../api/employee_leave_credits.php?email=${encodeURIComponent(employeeEmail)}`)
+                              .then(r => r.json())
+                              .then(res => {
+                                if (!res || !res.success) {
+                                  leaveGridDiv.innerHTML = '<div class="text-center text-red-500 p-4">Failed to load leave credits.</div>';
+                                  return;
+                                }
+                                // Trigger a page refresh for simplicity
+                                location.reload();
+                              });
+                          } else {
+                            alert('Error: ' + result.error);
+                          }
+                        } catch (err) {
+                          alert('Failed to update leave credits: ' + err.message);
+                        }
                       });
                     }
                   });

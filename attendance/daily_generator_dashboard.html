@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Daily Attendance Generator - Manual Trigger</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100 p-8">
+    <div class="max-w-4xl mx-auto">
+        <div class="bg-white rounded-lg shadow-lg p-6">
+            <h1 class="text-2xl font-bold text-gray-800 mb-4">
+                📅 Daily Attendance Generator
+            </h1>
+            
+            <div class="bg-blue-50 border-l-4 border-blue-500 p-4 mb-6">
+                <p class="text-sm text-blue-700">
+                    <strong>Purpose:</strong> This tool generates daily attendance records for all employees.
+                    Run this manually or set up automated scheduling.
+                </p>
+            </div>
+
+            <div class="mb-6">
+                <h2 class="font-semibold text-gray-700 mb-2">Features:</h2>
+                <ul class="list-disc list-inside text-gray-600 space-y-1">
+                    <li>Creates records for all approved employees</li>
+                    <li>Skips weekends (Saturday & Sunday)</li>
+                    <li>Marks absent if no time-in by 5:00 PM</li>
+                    <li>Works on both localhost and hosted servers</li>
+                </ul>
+            </div>
+
+            <div class="mb-6">
+                <button 
+                    id="runGenerator" 
+                    class="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-6 rounded-lg transition duration-200"
+                >
+                    ▶️ Run Generator Now
+                </button>
+                <button 
+                    id="checkStatus" 
+                    class="bg-gray-600 hover:bg-gray-700 text-white font-semibold py-3 px-6 rounded-lg transition duration-200 ml-2"
+                >
+                    📊 Check Last Run
+                </button>
+            </div>
+
+            <div id="result" class="hidden">
+                <h3 class="font-semibold text-gray-700 mb-2">Result:</h3>
+                <pre id="resultContent" class="bg-gray-900 text-green-400 p-4 rounded-lg overflow-auto max-h-96"></pre>
+            </div>
+
+            <div class="mt-8 bg-yellow-50 border-l-4 border-yellow-500 p-4">
+                <h3 class="font-semibold text-yellow-800 mb-2">⚙️ Setup Automation:</h3>
+                <div class="text-sm text-yellow-700 space-y-2">
+                    <p><strong>For Windows:</strong></p>
+                    <ol class="list-decimal list-inside ml-4 space-y-1">
+                        <li>Open Task Scheduler</li>
+                        <li>Create Basic Task</li>
+                        <li>Trigger: Daily at 6:00 AM (Monday-Friday)</li>
+                        <li>Action: Start Program</li>
+                        <li>Program: <code class="bg-yellow-100 px-1">run_daily_generator.cmd</code></li>
+                        <li>Add another task at 5:30 PM for marking absents</li>
+                    </ol>
+                    
+                    <p class="mt-3"><strong>For Linux/Hosted:</strong></p>
+                    <p>Add to crontab:</p>
+                    <code class="bg-yellow-100 px-2 py-1 block">
+                        0 6 * * 1-5 /usr/bin/php /path/to/generate_daily_records.php
+                    </code>
+                    <code class="bg-yellow-100 px-2 py-1 block mt-1">
+                        30 17 * * 1-5 /usr/bin/php /path/to/generate_daily_records.php
+                    </code>
+                    
+                    <p class="mt-3"><strong>Via Web (Cron Service):</strong></p>
+                    <p>Set up external cron job to access:</p>
+                    <code class="bg-yellow-100 px-2 py-1 block">
+                        https://yoursite.com/capstone/attendance/generate_daily_records.php?token=capstone_auto_attendance_2026
+                    </code>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const runBtn = document.getElementById('runGenerator');
+        const checkBtn = document.getElementById('checkStatus');
+        const resultDiv = document.getElementById('result');
+        const resultContent = document.getElementById('resultContent');
+
+        runBtn.addEventListener('click', async () => {
+            runBtn.disabled = true;
+            runBtn.textContent = '⏳ Running...';
+            resultDiv.classList.remove('hidden');
+            resultContent.textContent = 'Processing...';
+
+            try {
+                const response = await fetch('generate_daily_records.php?token=capstone_auto_attendance_2026');
+                const data = await response.json();
+                resultContent.textContent = JSON.stringify(data, null, 2);
+                
+                if (data.success) {
+                    runBtn.classList.remove('bg-blue-600', 'hover:bg-blue-700');
+                    runBtn.classList.add('bg-green-600');
+                    runBtn.textContent = '✅ Success!';
+                } else {
+                    runBtn.classList.remove('bg-blue-600', 'hover:bg-blue-700');
+                    runBtn.classList.add('bg-red-600');
+                    runBtn.textContent = '❌ Error!';
+                }
+                
+                setTimeout(() => {
+                    runBtn.disabled = false;
+                    runBtn.classList.remove('bg-green-600', 'bg-red-600');
+                    runBtn.classList.add('bg-blue-600', 'hover:bg-blue-700');
+                    runBtn.textContent = '▶️ Run Generator Now';
+                }, 3000);
+            } catch (error) {
+                resultContent.textContent = 'Error: ' + error.message;
+                runBtn.disabled = false;
+                runBtn.textContent = '❌ Error!';
+            }
+        });
+
+        checkBtn.addEventListener('click', async () => {
+            resultDiv.classList.remove('hidden');
+            resultContent.textContent = 'Loading log...';
+
+            try {
+                const response = await fetch('daily_generator_log.txt');
+                const text = await response.text();
+                const lines = text.trim().split('\n');
+                const lastLines = lines.slice(-10).reverse(); // Last 10 entries
+                resultContent.textContent = lastLines.join('\n');
+            } catch (error) {
+                resultContent.textContent = 'Error loading log: ' + error.message;
+            }
+        });
+    </script>
+</body>
+</html>

@@ -129,6 +129,7 @@ require_role('hr');
         <div
           id="leave-cards"
           class="flex gap-6 overflow-x-auto pb-4 -mx-2 px-2"
+          style="opacity: 0; transition: opacity 0.3s ease-in-out;"
         >
           <!-- Card: Vacation Leave -->
           <a
@@ -792,18 +793,27 @@ require_role('hr');
       (function () {
         async function resolveUserEmail() {
           try {
-            const local = localStorage.getItem("userEmail");
-            if (local && local.trim() !== "") return local.trim();
+            // ALWAYS fetch from API first to ensure fresh data
             const r = await fetch("/capstone/api/current_user.php");
-            if (!r.ok) return "";
+            if (!r.ok) {
+              console.error('[HR] Failed to fetch current user:', r.status);
+              return "";
+            }
             const js = await r.json();
             if (js && js.logged_in && js.email) {
+              console.log('[HR] API returned email:', js.email);
               try {
+                // Update localStorage with fresh email
                 localStorage.setItem("userEmail", js.email);
-              } catch (e) {}
+              } catch (e) {
+                console.error('[HR] Failed to set localStorage:', e);
+              }
               return js.email;
             }
-          } catch (e) {}
+            console.error('[HR] API returned invalid data:', js);
+          } catch (e) {
+            console.error('[HR] Exception in resolveUserEmail:', e);
+          }
           return "";
         }
 
@@ -815,9 +825,90 @@ require_role('hr');
             .trim();
         }
 
-        (async function loadCredits() {
+        // Ensure DOM is fully loaded before running
+        if (document.readyState === 'loading') {
+          document.addEventListener('DOMContentLoaded', initLeaveApplication);
+        } else {
+          initLeaveApplication();
+        }
+
+        async function initLeaveApplication() {
+          console.log('[HR] Initializing leave application check...');
           const email = await resolveUserEmail();
-          if (!email) return;
+          console.log('[HR] Resolved email:', email);
+          if (!email) {
+            console.error('[HR] No email found, cannot check leave status');
+            return;
+          }
+
+          // Check if user can apply for leave
+          let canApplyLeave = true;
+          try {
+            console.log('[HR] Checking leave status for:', email);
+            const statusResp = await fetch(`/capstone/api/get_employee_leave_status.php?email=${encodeURIComponent(email)}`);
+            console.log('[HR] Status response:', statusResp.status);
+            
+            if (!statusResp.ok) {
+              console.error('[HR] API response not OK:', statusResp.status);
+            } else {
+              const statusData = await statusResp.json();
+              console.log('[HR] Status data:', statusData);
+              if (statusData && statusData.success) {
+                canApplyLeave = statusData.data.can_apply_leave === 1;
+                console.log('[HR] Can apply leave:', canApplyLeave);
+              } else {
+                console.error('[HR] API returned error:', statusData);
+              }
+            }
+          } catch (e) {
+            console.error("[HR] Failed to fetch leave application status", e);
+          }
+
+          console.log('[HR] Final canApplyLeave value:', canApplyLeave);
+
+          // If user cannot apply for leave, show warning and disable all cards
+          if (!canApplyLeave) {
+            console.log('[HR] DISABLING LEAVE APPLICATION');
+            const container = document.getElementById('leave-cards');
+            console.log('[HR] Container found:', container);
+            if (container) {
+              // Add a notice at the top
+              const notice = document.createElement('div');
+              notice.className = 'col-span-full mb-6 p-4 bg-red-50 border-l-4 border-red-500 text-red-700 rounded';
+              notice.innerHTML = `
+                <div class="flex items-center gap-3">
+                  <i class="fas fa-exclamation-triangle text-2xl"></i>
+                  <div>
+                    <p class="font-semibold">Leave Application Disabled</p>
+                    <p class="text-sm">Your ability to apply for leave has been disabled by HR. Please contact HR for more information.</p>
+                  </div>
+                </div>
+              `;
+              container.parentElement.insertBefore(notice, container);
+              console.log('[HR] Warning banner added');
+            }
+
+            // Disable all leave application cards
+            const cards = document.querySelectorAll("#leave-cards a[data-leavetype]");
+            console.log('[HR] Found cards:', cards.length);
+            cards.forEach((card) => {
+              const btn = card.querySelector("button");
+              if (btn) {
+                btn.textContent = "Disabled";
+                btn.disabled = true;
+                btn.classList.remove("bg-blue-600", "hover:bg-blue-700");
+                btn.classList.add("bg-gray-400", "text-gray-700", "cursor-not-allowed");
+              }
+              card.addEventListener("click", (ev) => {
+                ev.preventDefault();
+                alert('Leave application is currently disabled. Please contact HR.');
+              });
+              card.style.opacity = '0.6';
+              card.style.pointerEvents = 'none';
+            });
+            console.log('[HR] All cards disabled');
+            // Continue to load actual leave credits (no return here!)
+          }
 
           // Fetch current user info to get gender
           let userGender = null;
@@ -912,7 +1003,14 @@ require_role('hr');
           } catch (err) {
             console.error("Failed to load leave credits", err);
           }
-        })();
+          
+          // Show cards after data is loaded
+          console.log('[HR] Showing cards after data load');
+          const cardsContainer = document.getElementById('leave-cards');
+          if (cardsContainer) {
+            cardsContainer.style.opacity = '1';
+          }
+        } // End of initLeaveApplication function
       })();
     </script>
   </body>

@@ -223,6 +223,13 @@ if (isset($_SESSION['user_id']) && $_SESSION['user_id'] === 'superadmin') {
     .filter-btn { color: #6b7280; }
     .filter-btn.active { background-color: #3b82f6; color: white; }
     .filter-btn:hover:not(.active) { background-color: #f3f4f6; }
+    .print-modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1000; justify-content: center; align-items: center; }
+    .print-modal.active { display: flex; }
+    .print-modal-content { background: #fff; border-radius: 12px; padding: 32px; max-width: 500px; width: 90%; box-shadow: 0 20px 60px rgba(0,0,0,0.3); }
+    .print-modal h2 { font-size: 24px; margin-bottom: 20px; color: #1f2937; }
+    .print-modal-buttons { display: flex; gap: 12px; justify-content: flex-end; margin-top: 24px; }
+    .print-modal-buttons button { padding: 10px 20px; border: none; border-radius: 8px; cursor: pointer; font-weight: 600; font-family: 'Inter', sans-serif; transition: all 0.3s; }
+    @media print { body * { visibility: hidden; } #print-area, #print-area * { visibility: visible; } #print-area { position: absolute; left: 0; top: 0; width: 100%; } }
 </style>
 </head>
 <body class="min-h-screen flex flex-col bg-gray-100 p-4 lg:p-10" data-user-id="<?= htmlspecialchars($userId, ENT_QUOTES) ?>">
@@ -355,6 +362,9 @@ if (isset($_SESSION['user_id']) && $_SESSION['user_id'] === 'superadmin') {
                     <button id="resetFilter" class="px-3 py-1.5 text-xs font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-all">
                         <i class="fas fa-redo mr-1"></i>Reset
                     </button>
+                    <button id="printBtn" class="px-3 py-1.5 text-xs font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-all">
+                        <i class="fas fa-print mr-1"></i>Print
+                    </button>
                 </div>
             </div>
         </div>
@@ -388,6 +398,26 @@ if (isset($_SESSION['user_id']) && $_SESSION['user_id'] === 'superadmin') {
         <div id="attendance-details-content" class="space-y-3"></div>
     </div>
 </div>
+
+<!-- Print Modal -->
+<div id="print-modal" class="print-modal">
+    <div class="print-modal-content">
+        <h2><i class="fas fa-print"></i> Print Attendance Records</h2>
+        <p style="color: #6b7280; margin-bottom: 20px;">You are about to print your attendance records based on current filter:</p>
+        <div id="print-preview-info" style="background: #f3f4f6; padding: 16px; border-radius: 8px; margin-bottom: 20px;"></div>
+        <div class="print-modal-buttons">
+            <button onclick="closePrintModal()" style="background: #e5e7eb; color: #374151;">
+                <i class="fas fa-times"></i> Cancel
+            </button>
+            <button onclick="executePrint()" style="background: #3b82f6; color: #fff;">
+                <i class="fas fa-print"></i> Print Now
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- Hidden print area -->
+<div id="print-area" style="display: none;"></div>
 
 <script>
     window.SERVER_ATTENDANCE = <?= json_encode($payload, JSON_HEX_TAG|JSON_HEX_APOS|JSON_HEX_AMP|JSON_HEX_QUOT) ?>;
@@ -763,6 +793,299 @@ document.addEventListener('DOMContentLoaded', () => {
     detailsModal.addEventListener('click', (e) => {
         if (e.target === detailsModal) detailsModal.classList.add('hidden');
     });
+
+    // Print functions
+    document.getElementById('printBtn').addEventListener('click', openPrintModal);
+
+    function openPrintModal() {
+        if (filteredRecords.length === 0) {
+            alert('No attendance records to print. Please adjust your filter.');
+            return;
+        }
+
+        let info = '<div style="margin-bottom: 12px;"><strong>Print Preview:</strong></div>';
+        info += '<ul style="list-style: none; padding: 0;">';
+
+        // Filter info
+        if (currentFilterType === 'day') {
+            const date = document.getElementById('dateFilter').value;
+            if (date) {
+                info += `<li style="margin-bottom: 8px;"><i class="fas fa-calendar" style="color: #3b82f6; margin-right: 8px;"></i><strong>Date:</strong> ${date}</li>`;
+            }
+        } else if (currentFilterType === 'month') {
+            const month = document.getElementById('monthFilter').value;
+            if (month) {
+                info += `<li style="margin-bottom: 8px;"><i class="fas fa-calendar-alt" style="color: #3b82f6; margin-right: 8px;"></i><strong>Month:</strong> ${month}</li>`;
+            }
+        } else if (currentFilterType === 'year') {
+            const year = document.getElementById('yearFilter').value;
+            if (year) {
+                info += `<li style="margin-bottom: 8px;"><i class="fas fa-calendar" style="color: #3b82f6; margin-right: 8px;"></i><strong>Year:</strong> ${year}</li>`;
+            }
+        }
+
+        info += `<li style="margin-bottom: 8px;"><i class="fas fa-list" style="color: #10b981; margin-right: 8px;"></i><strong>Total Records:</strong> ${filteredRecords.length}</li>`;
+        info += '</ul>';
+
+        document.getElementById('print-preview-info').innerHTML = info;
+        document.getElementById('print-modal').classList.add('active');
+    }
+
+    window.closePrintModal = function() {
+        document.getElementById('print-modal').classList.remove('active');
+    }
+
+    window.executePrint = function() {
+        if (filteredRecords.length === 0) return;
+
+        const userData = window.SERVER_ATTENDANCE.user;
+
+        // Generate print HTML
+        let printHTML = `
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="utf-8">
+            <title>Attendance Record</title>
+            <style>
+                @page { size: auto; margin: 15mm; }
+                * { margin: 0; padding: 0; box-sizing: border-box; }
+                body { 
+                    font-family: 'Arial', 'Helvetica', sans-serif; 
+                    padding: 30px;
+                    color: #333;
+                }
+                .header { 
+                    text-align: center; 
+                    margin-bottom: 30px;
+                    padding-bottom: 20px;
+                    border-bottom: 4px solid #2563eb;
+                }
+                .logo-section {
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    gap: 20px;
+                    margin-bottom: 15px;
+                }
+                .logo {
+                    width: 90px;
+                    height: 90px;
+                    border: 3px solid #2563eb;
+                    border-radius: 50%;
+                    padding: 5px;
+                }
+                .municipality-name {
+                    font-size: 22px;
+                    font-weight: 700;
+                    color: #1e40af;
+                    text-transform: uppercase;
+                    letter-spacing: 1px;
+                }
+                .title { 
+                    font-size: 26px; 
+                    font-weight: 700; 
+                    margin: 20px 0 15px 0;
+                    letter-spacing: 0.5px;
+                    line-height: 1.4;
+                }
+                .title .month { 
+                    color: #2563eb; 
+                    font-weight: 800;
+                }
+                .title .year { 
+                    color: #dc2626; 
+                    font-weight: 800;
+                }
+                .employee-info {
+                    display: flex;
+                    justify-content: space-between;
+                    align-items: center;
+                    margin: 25px 0;
+                    padding: 18px 24px;
+                    background: linear-gradient(135deg, #f8fafc 0%, #e0e7ff 100%);
+                    border: 2px solid #2563eb;
+                    border-radius: 10px;
+                    box-shadow: 0 2px 8px rgba(37, 99, 235, 0.15);
+                }
+                .employee-info div {
+                    font-size: 15px;
+                    font-weight: 600;
+                    color: #1e40af;
+                }
+                .employee-info strong {
+                    font-weight: 800;
+                    text-transform: uppercase;
+                    color: #1e293b;
+                    margin-right: 8px;
+                }
+                .employee-info span {
+                    color: #334155;
+                    font-weight: 500;
+                }
+                table { 
+                    width: 100%; 
+                    border-collapse: collapse; 
+                    margin: 25px 0;
+                    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+                }
+                th { 
+                    background: linear-gradient(135deg, #2563eb 0%, #1e40af 100%);
+                    color: white;
+                    font-weight: 700;
+                    text-transform: uppercase;
+                    font-size: 13px;
+                    letter-spacing: 0.5px;
+                    padding: 14px 12px;
+                    border: 2px solid #1e40af;
+                }
+                td { 
+                    font-size: 14px;
+                    padding: 12px;
+                    border: 1px solid #cbd5e1;
+                    background: white;
+                    color: #1e293b;
+                }
+                tr:nth-child(even) td {
+                    background: #f8fafc;
+                }
+                tr:hover td {
+                    background: #e0f2fe;
+                }
+                .date-col { 
+                    width: 25%; 
+                    font-weight: 600;
+                    color: #0f172a;
+                }
+                .time-col { 
+                    width: 37.5%; 
+                    text-align: center;
+                }
+                .footer {
+                    margin-top: 40px;
+                    padding-top: 20px;
+                    border-top: 2px solid #cbd5e1;
+                    text-align: center;
+                    font-size: 11px;
+                    color: #64748b;
+                }
+                .footer strong {
+                    color: #1e40af;
+                    font-weight: 600;
+                }
+            </style>
+        </head>
+        <body>
+        `;
+
+        // Get period label
+        let monthName = '';
+        let yearValue = '';
+
+        if (currentFilterType === 'day') {
+            const dateVal = document.getElementById('dateFilter').value;
+            if (dateVal) {
+                const date = new Date(dateVal);
+                monthName = date.toLocaleString('en-US', { month: 'long' }).toUpperCase();
+                yearValue = date.getFullYear();
+            } else {
+                monthName = 'ALL DATES';
+                yearValue = new Date().getFullYear();
+            }
+        } else if (currentFilterType === 'month') {
+            const monthVal = document.getElementById('monthFilter').value;
+            if (monthVal) {
+                const date = new Date(monthVal + '-01');
+                monthName = date.toLocaleString('en-US', { month: 'long' }).toUpperCase();
+                yearValue = date.getFullYear();
+            } else {
+                monthName = 'ALL MONTHS';
+                yearValue = new Date().getFullYear();
+            }
+        } else if (currentFilterType === 'year') {
+            const yearVal = document.getElementById('yearFilter').value;
+            yearValue = yearVal || new Date().getFullYear();
+            monthName = 'ALL MONTHS';
+        }
+
+        printHTML += `
+        <div class="header">
+            <div class="logo-section">
+                <img src="../assets/logo.png" alt="Municipality Logo" class="logo">
+                <div class="municipality-name">Municipality of Mabini</div>
+            </div>
+            <div class="title">
+                <span class="month">${monthName}</span> 
+                <span class="year">${yearValue}</span> 
+                ATTENDANCE RECORD
+            </div>
+        </div>
+
+        <div class="employee-info">
+            <div><strong>Fullname of the User:</strong> <span>${userData.name}</span></div>
+            <div><strong>ID of the User:</strong> <span>${userData.employee_id}</span></div>
+        </div>
+
+        <table>
+            <thead>
+                <tr>
+                    <th class="date-col">DATE</th>
+                    <th class="time-col">TIME IN</th>
+                    <th class="time-col">TIME OUT</th>
+                </tr>
+            </thead>
+            <tbody>
+        `;
+
+        // Add records
+        filteredRecords.forEach(rec => {
+            const date = rec.date || '';
+            const timeIn = rec.timeIn || '—';
+            const timeOut = rec.timeOut || '—';
+
+            printHTML += `
+                <tr>
+                    <td class="date-col">${date}</td>
+                    <td class="time-col">${timeIn}</td>
+                    <td class="time-col">${timeOut}</td>
+                </tr>
+            `;
+        });
+
+        printHTML += `
+            </tbody>
+        </table>
+        
+        <div class="footer">
+            <p><strong>Municipality of Mabini</strong> - Official Attendance Record</p>
+            <p>Generated on ${new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}</p>
+        </div>
+        </body>
+        </html>
+        `;
+
+        // Create hidden iframe for printing
+        const printFrame = document.createElement('iframe');
+        printFrame.style.display = 'none';
+        document.body.appendChild(printFrame);
+
+        const doc = printFrame.contentWindow.document;
+        doc.open();
+        doc.write(printHTML);
+        doc.close();
+
+        // Wait for images to load then print
+        printFrame.contentWindow.onload = function() {
+            setTimeout(() => {
+                printFrame.contentWindow.focus();
+                printFrame.contentWindow.print();
+                setTimeout(() => {
+                    document.body.removeChild(printFrame);
+                    closePrintModal();
+                }, 100);
+            }, 250);
+        };
+    }
 
     // Initial render
     renderDailyRecords();

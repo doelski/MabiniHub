@@ -12,10 +12,14 @@ if (!$email) {
 }
 
 try {
-    $stmt = $pdo->prepare('SELECT firstname, lastname, mi, department, position, email, gender FROM users WHERE email = ?');
+    $stmt = $pdo->prepare('SELECT firstname, lastname, mi, department, position, email, gender, can_apply_leave FROM users WHERE email = ?');
     $stmt->execute([$email]);
     $u = $stmt->fetch(PDO::FETCH_ASSOC);
     if ($u) {
+        // Ensure can_apply_leave is set (default to 1 if column doesn't exist yet)
+        if (!isset($u['can_apply_leave'])) {
+            $u['can_apply_leave'] = 1;
+        }
         echo json_encode(array_merge(['logged_in' => true], $u));
         exit;
     }

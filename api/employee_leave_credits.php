@@ -175,21 +175,36 @@ try {
         }
     }
 
+    // Check for HR overrides on leave credits
+    $overrides = [];
+    try {
+        $overrideStmt = $pdo->prepare("SELECT leave_type, override_credits FROM employee_leave_credits_override WHERE employee_email = ?");
+        $overrideStmt->execute([$email]);
+        $overrideRows = $overrideStmt->fetchAll(PDO::FETCH_ASSOC);
+        foreach ($overrideRows as $row) {
+            $overrides[$row['leave_type']] = (float)$row['override_credits'];
+        }
+    } catch (PDOException $e) {
+        // Table might not exist yet, ignore
+    }
+
     $items = [];
     $totalAll = 0;
     $usedAll = 0;
     foreach ($ENTITLEMENTS as $label => $total) {
+        // Use override if set by HR, otherwise use default
+        $actualTotal = isset($overrides[$label]) ? $overrides[$label] : $total;
         $u = max(0, (int)($used[$label] ?? 0));
-        $a = max(0, $total - $u);
+        $a = max(0, $actualTotal - $u);
         $items[] = [
             'type' => $label,
-            'total' => $total,
+            'total' => $actualTotal,
             'used' => $u,
             'available' => $a,
             'unit' => 'days',
         ];
-        $totalAll += $total;
-        $usedAll += min($u, $total);
+        $totalAll += $actualTotal;
+        $usedAll += min($u, $actualTotal);
     }
 
     echo json_encode([

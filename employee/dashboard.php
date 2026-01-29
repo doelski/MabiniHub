@@ -700,6 +700,12 @@ $isJoOrOjt = (strpos($positionLower, 'jo') !== false || strpos($positionLower, '
 
     <script>
         document.addEventListener('DOMContentLoaded', () => {
+           // Declare variables once at the top
+           const _currentUserEmail = <?php echo json_encode($userEmail); ?>;
+           const _isJoOrOjt = <?php echo json_encode($isJoOrOjt); ?>;
+           
+           // Leave application status check removed - handled in apply_leave.php page itself
+           
            // Notification logic
            let notifications = [];
            const bell = document.getElementById('notification-bell');
@@ -752,8 +758,6 @@ $isJoOrOjt = (strpos($positionLower, 'jo') !== false || strpos($positionLower, '
            loadNotifications();
                      // --- Real-time Leave Credits widget for current user ---
                      const leaveGridHost = document.getElementById('leave-credits-grid');
-                     const _currentUserEmail = <?php echo json_encode($userEmail); ?>;
-                     const _isJoOrOjt = <?php echo json_encode($isJoOrOjt); ?>;
                      async function fetchLeaveCreditsForCurrentUser(){
                              if (!leaveGridHost) return;
                              if (_isJoOrOjt) {

@@ -2,7 +2,7 @@
 CREATE DATABASE IF NOT EXISTS `capstone` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 USE `capstone`;
 
--- users table: includes role, contact number, normalized status, employee_id, and leave credits
+-- users table: includes role, contact number, normalized status, employee_id, leave credits, gender, leave application toggle, and archiving
 CREATE TABLE IF NOT EXISTS users (
 	id INT AUTO_INCREMENT PRIMARY KEY,
 	lastname VARCHAR(100) NOT NULL,
@@ -19,6 +19,10 @@ CREATE TABLE IF NOT EXISTS users (
 	employee_id VARCHAR(100) DEFAULT NULL UNIQUE,
 	vacation_leave DECIMAL(10,2) DEFAULT 15.00 COMMENT 'Vacation leave credits',
 	sick_leave DECIMAL(10,2) DEFAULT 15.00 COMMENT 'Sick leave credits',
+	gender ENUM('M','F') DEFAULT NULL COMMENT 'Employee gender: M (Male) or F (Female)',
+	can_apply_leave TINYINT(1) DEFAULT 1 COMMENT 'Controls whether employee can apply for leave: 1=enabled, 0=disabled',
+	is_archived TINYINT(1) NOT NULL DEFAULT 0 COMMENT 'Soft delete flag: 0=active, 1=archived',
+	archived_at DATETIME NULL DEFAULT NULL COMMENT 'Timestamp when user was archived',
 	created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 	updated_at TIMESTAMP NULL DEFAULT NULL ON UPDATE CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
@@ -74,6 +78,19 @@ CREATE TABLE IF NOT EXISTS leave_requests (
 	INDEX idx_status (status),
 	INDEX idx_approved_by_hr (approved_by_hr),
 	INDEX idx_approved_by_municipal (approved_by_municipal)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Override leave credits set by HR users
+CREATE TABLE IF NOT EXISTS employee_leave_credits_override (
+	id INT AUTO_INCREMENT PRIMARY KEY,
+	employee_email VARCHAR(100) NOT NULL,
+	leave_type VARCHAR(100) NOT NULL COMMENT 'Leave type: Vacation Leave, Sick Leave, Maternity Leave, Paternity Leave, Calamity Leave, Special Privilege Leave, Solo Parent Leave, Magna Carta for Women, Rehabilitation Privilege',
+	override_credits DECIMAL(10,2) NOT NULL COMMENT 'HR-set leave credits override',
+	updated_by VARCHAR(100) NOT NULL COMMENT 'HR user email who set the override',
+	updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT 'Last update timestamp',
+	UNIQUE KEY unique_override (employee_email, leave_type) COMMENT 'One override per employee per leave type',
+	INDEX idx_employee_email (employee_email),
+	INDEX idx_leave_type (leave_type)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- Persist employee signature for reuse
