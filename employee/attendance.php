@@ -16,67 +16,9 @@ if (!$user) {
     exit();
 }
 
-if ((isset($_GET['qr']) && $_GET['qr']) || (!empty($_SESSION['qr_pending']))) {
-    require_once __DIR__ . '/../attendance/qr_utils.php';
-    $pending = $_GET['qr'] ?? $_SESSION['qr_pending'];
-    if ($pending && qr_verify_token($pending, 0)) {
-        // Record attendance for the current logged-in user
-        $res = qr_record_attendance_for_user($pdo, $_SESSION['user_id']);
-        // Clear any pending token stored in session
-        unset($_SESSION['qr_pending']);
-
-        // Determine base redirect target based on role/position (same logic as index.php)
-        if (isset($_SESSION['user_id']) && $_SESSION['user_id'] === 'superadmin') {
-            $redirect = '../super_admin.php';
-        } else {
-            $sessRole = strtolower($_SESSION['role'] ?? $_SESSION['position'] ?? '');
-            if ($sessRole === 'hr' || $sessRole === 'human resources') {
-                $redirect = '../hr/dashboard.php';
-            } elseif ($sessRole === 'department_head' || $sessRole === 'dept head' || $sessRole === 'dept_head') {
-                $redirect = '../dept_head/dashboard.php';
-            } elseif ($sessRole === 'employee') {
-                $redirect = '../employee/dashboard.php';
-            } else {
-                $redirect = '../dashboard.php';
-            }
-        }
-
-        // If attendance result exists, map it to query params similar to index.php
-        if (!empty($res) && is_array($res)) {
-            if (!empty($res['success'])) {
-                $msg = ($res['action'] === 'time_in') ? 'timein_ok' : 'timeout_ok';
-                $timeParam = isset($res['time']) ? '&att_time=' . urlencode($res['time']) : '';
-                $statusParam = isset($res['status']) ? '&att_status=' . urlencode($res['status']) : '';
-                header('Location: ' . $redirect . '?att=' . $msg . $timeParam . $statusParam);
-                exit();
-            } else {
-                $lowerMsg = strtolower($res['message'] ?? '');
-                if (strpos($lowerMsg, 'time out already') !== false || strpos($lowerMsg, 'time out already recorded') !== false) {
-                    $timeParam = isset($res['time']) ? '&att_time=' . urlencode($res['time']) : '';
-                    $statusParam = isset($res['status']) ? '&att_status=' . urlencode($res['status']) : '';
-                    header('Location: ' . $redirect . '?att=already_timedout' . $timeParam . $statusParam);
-                    exit();
-                }
-                header('Location: ' . $redirect . '?att=failed');
-                exit();
-            }
-        }
-
-        // Fallback: redirect to target dashboard without params
-        header('Location: ' . $redirect);
-        exit();
-    } else {
-        // Invalid/expired token - set a flag so UI can show feedback (consistent with index.php)
-        $_SESSION['qr_pending_invalid'] = true;
-        unset($_SESSION['qr_pending']);
-        // Redirect back to login page to show invalid QR feedback
-        header('Location: ../index.php');
-        exit();
-    }
-}
-
 // Determine identifier used in attendance.employee_id
 $employeeId = $user['employee_id'] ?? null;
+$employeeFullName = trim($user['firstname'] . ' ' . $user['lastname']);
 
 // If employee_id is missing, there's no attendance records tied; leave as null
 $attendanceRows = [];
@@ -107,9 +49,15 @@ foreach ($attendanceRows as $r) {
     // Get status from database
     $timeInStatus = $r['time_in_status'] ?? null;
     $timeOutStatus = $r['time_out_status'] ?? null;
+    $dbStatus = trim(strtolower($r['status'] ?? '')); // Get and normalize the overall status field
     
-    // determine unified display status prioritizing time-out status when available
-    if ($timeInStatus === 'Absent' || !$timeInRaw) {
+    // PRIORITY: Check database status field FIRST (for special statuses like on-leave)
+    // This MUST take precedence over calculated statuses
+    if ($dbStatus === 'on-leave' || $dbStatus === 'on leave' || $dbStatus === 'leave') {
+        $status = 'On Leave';
+    } 
+    // Otherwise determine unified display status based on time-in/time-out
+    elseif ($timeInStatus === 'Absent' || (!$timeInRaw && $dbStatus !== 'on-leave')) {
         $status = 'Absent';
     } elseif ($timeOutStatus === 'Undertime') {
         $status = 'Undertime';
@@ -120,7 +68,8 @@ foreach ($attendanceRows as $r) {
     } elseif ($timeInStatus === 'Late') {
         $status = 'Late';
     } else {
-        $status = 'Present';
+        // Final fallback - check if database has a value
+        $status = $dbStatus ? ucwords($dbStatus) : 'Present';
     }
 
     // Set flags based on database status values
@@ -377,6 +326,7 @@ if (isset($_SESSION['user_id']) && $_SESSION['user_id'] === 'superadmin') {
                         <th scope="col" class="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Time In Status</th>
                         <th scope="col" class="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Time Out</th>
                         <th scope="col" class="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Time Out Status</th>
+                        <th scope="col" class="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Status</th>
                         <th scope="col" class="px-6 py-3"></th>
                     </tr>
                 </thead>
@@ -593,7 +543,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const tbody = document.getElementById('attendance-table-body');
         tbody.innerHTML = '';
         if (filteredRecords.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="6" class="px-6 py-8 text-center text-sm text-gray-500">No attendance records found.</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="7" class="px-6 py-8 text-center text-sm text-gray-500">No attendance records found.</td></tr>';
             return;
         }
         filteredRecords.slice().reverse().forEach(rec => {
@@ -633,6 +583,25 @@ document.addEventListener('DOMContentLoaded', () => {
                 timeOutStatusBadge = '<span class="text-gray-400">—</span>';
             }
 
+            // Overall Status Badge
+            let statusBadge = '';
+            const status = rec.status || 'Present';
+            if (status === 'On Leave') {
+                statusBadge = '<span class="inline-flex items-center text-xs font-medium rounded-full bg-purple-100 text-purple-800 px-2 py-0.5"><i class="fas fa-umbrella-beach mr-1"></i>On Leave</span>';
+            } else if (status === 'Absent') {
+                statusBadge = '<span class="inline-flex items-center text-xs font-medium rounded-full bg-red-100 text-red-800 px-2 py-0.5"><i class="fas fa-times mr-1"></i>Absent</span>';
+            } else if (status === 'Late') {
+                statusBadge = '<span class="inline-flex items-center text-xs font-medium rounded-full bg-yellow-100 text-yellow-800 px-2 py-0.5"><i class="fas fa-clock mr-1"></i>Late</span>';
+            } else if (status === 'Undertime') {
+                statusBadge = '<span class="inline-flex items-center text-xs font-medium rounded-full bg-orange-100 text-orange-800 px-2 py-0.5"><i class="fas fa-user-clock mr-1"></i>Undertime</span>';
+            } else if (status === 'Overtime') {
+                statusBadge = '<span class="inline-flex items-center text-xs font-medium rounded-full bg-blue-100 text-blue-800 px-2 py-0.5"><i class="fas fa-business-time mr-1"></i>Overtime</span>';
+            } else if (status === 'Present') {
+                statusBadge = '<span class="inline-flex items-center text-xs font-medium rounded-full bg-green-100 text-green-800 px-2 py-0.5"><i class="fas fa-check mr-1"></i>Present</span>';
+            } else {
+                statusBadge = '<span class="text-gray-400">—</span>';
+            }
+
             const row = document.createElement('tr');
             row.className = 'hover:bg-gray-50 transition';
             row.innerHTML = `
@@ -641,6 +610,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 <td class="px-6 py-4 whitespace-nowrap text-sm">${timeInStatusBadge}</td>
                 <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-600">${rec.timeOut || '<span class="text-gray-400">—</span>'}</td>
                 <td class="px-6 py-4 whitespace-nowrap text-sm">${timeOutStatusBadge}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm">${statusBadge}</td>
                 <td class="px-6 py-4 whitespace-nowrap text-right text-sm">
                     <button data-id="${rec.id}" class="view-details-btn text-blue-600 hover:text-blue-800 font-medium">Details</button>
                 </td>
@@ -800,11 +770,35 @@ document.addEventListener('DOMContentLoaded', () => {
                     timeOutStatusBadge = '<span class="inline-flex items-center text-xs font-medium rounded-full bg-green-100 text-green-800 px-2 py-0.5"><i class="fas fa-check mr-1"></i>Out</span>';
                 }
             }
+
+            // Overall Status Badge
+            let statusBadge = '';
+            const status = rec.status || 'Present';
+            if (status === 'On Leave') {
+                statusBadge = '<span class="inline-flex items-center text-xs font-medium rounded-full bg-purple-100 text-purple-800 px-2 py-0.5"><i class="fas fa-umbrella-beach mr-1"></i>On Leave</span>';
+            } else if (status === 'Absent') {
+                statusBadge = '<span class="inline-flex items-center text-xs font-medium rounded-full bg-red-100 text-red-800 px-2 py-0.5"><i class="fas fa-times mr-1"></i>Absent</span>';
+            } else if (status === 'Late') {
+                statusBadge = '<span class="inline-flex items-center text-xs font-medium rounded-full bg-yellow-100 text-yellow-800 px-2 py-0.5"><i class="fas fa-clock mr-1"></i>Late</span>';
+            } else if (status === 'Undertime') {
+                statusBadge = '<span class="inline-flex items-center text-xs font-medium rounded-full bg-orange-100 text-orange-800 px-2 py-0.5"><i class="fas fa-user-clock mr-1"></i>Undertime</span>';
+            } else if (status === 'Overtime') {
+                statusBadge = '<span class="inline-flex items-center text-xs font-medium rounded-full bg-blue-100 text-blue-800 px-2 py-0.5"><i class="fas fa-business-time mr-1"></i>Overtime</span>';
+            } else if (status === 'Present') {
+                statusBadge = '<span class="inline-flex items-center text-xs font-medium rounded-full bg-green-100 text-green-800 px-2 py-0.5"><i class="fas fa-check mr-1"></i>Present</span>';
+            } else {
+                statusBadge = '<span class="text-gray-400">—</span>';
+            }
+
             detailsContent.innerHTML = `
                 <div class="grid grid-cols-2 gap-3">
                     <div>
                         <p class="text-xs text-gray-500">Date</p>
                         <p class="text-sm font-medium text-gray-900">${rec.date}</p>
+                    </div>
+                    <div>
+                        <p class="text-xs text-gray-500">Overall Status</p>
+                        <p class="text-sm font-medium text-gray-900">${statusBadge}</p>
                     </div>
                     <div>
                         <p class="text-xs text-gray-500">Time In</p>

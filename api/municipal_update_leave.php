@@ -195,6 +195,55 @@ try {
             WHERE id = ?");
         $updateStmt->execute([$id]);
 
+        // AUTO-CREATE ATTENDANCE RECORDS WITH "ON-LEAVE" STATUS
+        // Get employee_id from users table
+        $empIdStmt = $pdo->prepare("SELECT employee_id FROM users WHERE email = ?");
+        $empIdStmt->execute([$leave['emp_email']]);
+        $employee_id = $empIdStmt->fetchColumn();
+        
+        if ($employee_id) {
+            // Parse all dates from the leave request dates field
+            if (preg_match_all('/\d{4}-\d{2}-\d{2}/', $dates, $matches)) {
+                $leave_dates = [];
+                
+                if (count($matches[0]) >= 2) {
+                    // Date range: generate all dates between start and end
+                    $start_date = new DateTime($matches[0][0]);
+                    $end_date = new DateTime($matches[0][1]);
+                    $end_date->modify('+1 day'); // Include end date
+                    
+                    $interval = new DateInterval('P1D');
+                    $period = new DatePeriod($start_date, $interval, $end_date);
+                    
+                    foreach ($period as $date) {
+                        $leave_dates[] = $date->format('Y-m-d');
+                    }
+                } else if (count($matches[0]) == 1) {
+                    // Single date
+                    $leave_dates[] = $matches[0][0];
+                }
+                
+                // Insert/Update attendance records for each leave date
+                foreach ($leave_dates as $leave_date) {
+                    try {
+                        // Use INSERT ... ON DUPLICATE KEY UPDATE to handle existing records
+                        $attStmt = $pdo->prepare("
+                            INSERT INTO attendance 
+                            (employee_id, date, time_in, time_out, time_in_status, time_out_status, status, created_at, updated_at)
+                            VALUES (?, ?, NULL, NULL, NULL, NULL, 'on-leave', NOW(), NOW())
+                            ON DUPLICATE KEY UPDATE
+                                status = 'on-leave',
+                                updated_at = NOW()
+                        ");
+                        $attStmt->execute([$employee_id, $leave_date]);
+                    } catch (PDOException $e) {
+                        // Log error but don't fail leave approval
+                        error_log("Failed to create attendance record for $leave_date: " . $e->getMessage());
+                    }
+                }
+            }
+        }
+
         // Store municipal signature in details JSON
         if ($signature_path) {
             $details = json_decode($leave['details'], true) ?: [];

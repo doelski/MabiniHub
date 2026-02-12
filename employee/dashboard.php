@@ -36,7 +36,7 @@ if ($nowH >= 17) {
     }
 }
 $attendanceFlash = null;
-// Map ?att= flags (set by QR login flow) to human messages
+// Handle attendance operation result messages from URL parameters
 if (!empty($_GET['att'])) {
     $att = $_GET['att'];
     if ($att === 'timein_ok') {
@@ -366,7 +366,6 @@ $isJoOrOjt = (strpos($positionLower, 'jo') !== false || strpos($positionLower, '
                             </div>
                             <span class="text-sm text-gray-600">Task</span>
                         </a>
-                        <!-- My QR Code removed: personal QR page removed per new rotating QR flow -->
                         <a href="attendance.php" class="flex flex-col items-center space-y-2 cursor-pointer">
                             <div class="bg-yellow-100 p-4 rounded-full">
                                 <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-yellow-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">

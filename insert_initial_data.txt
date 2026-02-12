@@ -1,6 +1,0 @@
-INSERT INTO fingerprints (employee_id, template, created_at)
-VALUES (
-    'EMP2025-0001',
-    LOAD_FILE('C:/xampp/htdocs/capstone/fingerprint/server/fingerprint.bmp'),
-    NOW()
-);

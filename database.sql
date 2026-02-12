@@ -1,8 +1,24 @@
--- Create and use a self-contained database named exactly "capstone"
+-- ============================================================================
+-- MabiniHub Employee Management System - Database Schema
+-- Finalized Version - Ready for Deployment
+-- ============================================================================
+-- This database schema is production-ready and includes:
+-- - User management with role-based access (employee, department_head, hr, municipal admin)
+-- - Leave request workflow with multi-level approvals
+-- - CSV-based attendance tracking with time range rules
+-- - Task assignment system
+-- - Event management
+-- - Notification system
+-- ============================================================================
+
 CREATE DATABASE IF NOT EXISTS `capstone` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 USE `capstone`;
 
--- users table: includes role, contact number, normalized status, employee_id, leave credits, gender, leave application toggle, and archiving
+-- ============================================================================
+-- USERS TABLE
+-- ============================================================================
+-- Manages all system users including employees, department heads, HR staff
+-- Includes leave credits, archiving support, and employee identification
 CREATE TABLE IF NOT EXISTS users (
 	id INT AUTO_INCREMENT PRIMARY KEY,
 	lastname VARCHAR(100) NOT NULL,
@@ -24,9 +40,17 @@ CREATE TABLE IF NOT EXISTS users (
 	is_archived TINYINT(1) NOT NULL DEFAULT 0 COMMENT 'Soft delete flag: 0=active, 1=archived',
 	archived_at DATETIME NULL DEFAULT NULL COMMENT 'Timestamp when user was archived',
 	created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-	updated_at TIMESTAMP NULL DEFAULT NULL ON UPDATE CURRENT_TIMESTAMP
+	updated_at TIMESTAMP NULL DEFAULT NULL ON UPDATE CURRENT_TIMESTAMP,
+	INDEX idx_employee_id (employee_id),
+	INDEX idx_email (email),
+	INDEX idx_role (role),
+	INDEX idx_department (department)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- ============================================================================
+-- EVENTS TABLE
+-- ============================================================================
+-- Manages organizational events visible to all employees
 CREATE TABLE IF NOT EXISTS events (
     id INT AUTO_INCREMENT PRIMARY KEY,
     title VARCHAR(255) NOT NULL,
@@ -35,10 +59,16 @@ CREATE TABLE IF NOT EXISTS events (
     location VARCHAR(255) NOT NULL,
     description TEXT NOT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP NULL DEFAULT NULL ON UPDATE CURRENT_TIMESTAMP
+    updated_at TIMESTAMP NULL DEFAULT NULL ON UPDATE CURRENT_TIMESTAMP,
+    INDEX idx_date (date)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- Persist leave requests
+-- ============================================================================
+-- LEAVE REQUESTS TABLE
+-- ============================================================================
+-- Handles leave applications with multi-level approval workflow:
+-- Employee -> Department Head -> HR -> Municipal Admin (final approval)
+-- When approved_by_municipal=1, auto-creates attendance with status='on-leave'
 CREATE TABLE IF NOT EXISTS leave_requests (
 	id INT AUTO_INCREMENT PRIMARY KEY,
 	employee_email VARCHAR(100) NOT NULL,
@@ -80,7 +110,11 @@ CREATE TABLE IF NOT EXISTS leave_requests (
 	INDEX idx_approved_by_municipal (approved_by_municipal)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- Override leave credits set by HR users
+-- ============================================================================
+-- EMPLOYEE LEAVE CREDITS OVERRIDE TABLE
+-- ============================================================================
+-- Allows HR to manually set custom leave credits for specific employees
+-- Overrides default vacation_leave and sick_leave from users table
 CREATE TABLE IF NOT EXISTS employee_leave_credits_override (
 	id INT AUTO_INCREMENT PRIMARY KEY,
 	employee_email VARCHAR(100) NOT NULL,
@@ -93,7 +127,13 @@ CREATE TABLE IF NOT EXISTS employee_leave_credits_override (
 	INDEX idx_leave_type (leave_type)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- Persist employee signature for reuse
+-- ============================================================================
+-- SIGNATURE TABLES
+-- ============================================================================
+-- Store signature images for reuse across leave applications
+-- Each user role has their own signature storage table
+
+-- Employee signatures
 CREATE TABLE IF NOT EXISTS employee_signatures (
 	id INT AUTO_INCREMENT PRIMARY KEY,
 	employee_email VARCHAR(100) NOT NULL UNIQUE,
@@ -102,7 +142,7 @@ CREATE TABLE IF NOT EXISTS employee_signatures (
 	updated_at TIMESTAMP NULL DEFAULT NULL ON UPDATE CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- Persist department head signature for reuse
+-- Department head signatures
 CREATE TABLE IF NOT EXISTS dept_head_signatures (
 	id INT AUTO_INCREMENT PRIMARY KEY,
 	email VARCHAR(100) NOT NULL UNIQUE,
@@ -111,7 +151,7 @@ CREATE TABLE IF NOT EXISTS dept_head_signatures (
 	updated_at TIMESTAMP NULL DEFAULT NULL ON UPDATE CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- Persist HR signature for reuse
+-- HR signatures
 CREATE TABLE IF NOT EXISTS hr_signatures (
 	id INT AUTO_INCREMENT PRIMARY KEY,
 	email VARCHAR(100) NOT NULL UNIQUE,
@@ -120,7 +160,7 @@ CREATE TABLE IF NOT EXISTS hr_signatures (
 	updated_at TIMESTAMP NULL DEFAULT NULL ON UPDATE CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- Persist municipal admin signature for reuse
+-- Municipal admin signatures
 CREATE TABLE IF NOT EXISTS municipal_signatures (
 	id INT AUTO_INCREMENT PRIMARY KEY,
 	email VARCHAR(100) NOT NULL UNIQUE,
@@ -129,6 +169,10 @@ CREATE TABLE IF NOT EXISTS municipal_signatures (
 	updated_at TIMESTAMP NULL DEFAULT NULL ON UPDATE CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- ============================================================================
+-- NOTIFICATIONS TABLE
+-- ============================================================================
+-- System notifications for leave recalls and other important updates
 CREATE TABLE IF NOT EXISTS notifications (
 	id INT AUTO_INCREMENT PRIMARY KEY,
 	recipient_email VARCHAR(100),
@@ -136,10 +180,16 @@ CREATE TABLE IF NOT EXISTS notifications (
 	message TEXT NOT NULL,
 	type VARCHAR(50) DEFAULT 'recall',
 	is_read TINYINT(1) DEFAULT 0,
-	created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+	created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+	INDEX idx_recipient_email (recipient_email),
+	INDEX idx_is_read (is_read)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- Tasks assigned by department heads to employees
+-- ============================================================================
+-- TASKS TABLE
+-- ============================================================================
+-- Department heads can assign tasks to employees with attachments and deadlines
+-- Supports task lifecycle: pending -> in_progress -> completed
 CREATE TABLE IF NOT EXISTS tasks (
 	id INT AUTO_INCREMENT PRIMARY KEY,
 	title VARCHAR(255) NOT NULL,
@@ -158,68 +208,72 @@ CREATE TABLE IF NOT EXISTS tasks (
 	updated_at TIMESTAMP NULL DEFAULT NULL ON UPDATE CURRENT_TIMESTAMP,
 	INDEX idx_assigned_to (assigned_to_email),
 	INDEX idx_assigned_by (assigned_by_email),
-	INDEX idx_status (status)
+	INDEX idx_status (status),
+	INDEX idx_due_date (due_date)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- Attendance table (standalone; users.employee_id already present above)
+-- ============================================================================
+-- ATTENDANCE TABLE
+-- ============================================================================
+-- CSV-based attendance tracking with finalized time range rules
+-- 
+-- TIME RANGE RULES (applied during CSV import):
+--   TIME IN STATUS:
+--     Present:    4:00 AM - 7:00 AM
+--     Late:       7:01 AM - 12:00 PM (noon)
+--     Absent:     10:00 AM onwards (no time in before 10 AM)
+--   
+--   TIME OUT STATUS:
+--     Undertime:  1:00 PM - 4:59 PM
+--     Out:        5:00 PM - 6:00 PM (normal dismissal)
+--     Overtime:   6:01 PM - 8:00 PM
+-- 
+-- SPECIAL STATUS HANDLING:
+--   - status='on-leave' is auto-created when Municipal Admin approves leave
+--   - When status='on-leave', display shows only "ON LEAVE" badge (purple)
+--   - Time In/Out Status columns show dash (—) when on leave
+--   - Database stores dates as YYYY-MM-DD, CSV imports as DD/MM/YYYY
+-- 
+-- UNIQUE CONSTRAINT:
+--   - One attendance record per employee per date (employee_id, date)
+--   - CSV import uses INSERT...ON DUPLICATE KEY UPDATE for upsert behavior
+-- ============================================================================
 CREATE TABLE IF NOT EXISTS attendance (
     id INT AUTO_INCREMENT PRIMARY KEY,
     employee_id VARCHAR(100) NOT NULL,
-    date DATE NOT NULL,
-    time_in DATETIME DEFAULT NULL,
-    time_out DATETIME DEFAULT NULL,
-	time_in_status ENUM('Present','Late','Undertime','Absent') DEFAULT NULL COMMENT 'Time In Status: Present (6:00 AM - 8:00 AM), Late (8:01 AM - 12:00 PM), Undertime (12:01 PM - 5:00 PM), Absent (after 5:00 PM)',
-	time_out_status ENUM('Out','Undertime','Overtime','On-time') DEFAULT NULL COMMENT 'Time Out Status: Undertime (up to 4:59 PM), Out (5:00 PM - 5:59 PM), Overtime (6:00 PM onwards). Includes On-time for backward compatibility.',
-    status VARCHAR(20) DEFAULT NULL COMMENT 'Overall daily status: Present, Absent, etc.',
+    date DATE NOT NULL COMMENT 'Attendance date in YYYY-MM-DD format',
+    time_in DATETIME DEFAULT NULL COMMENT 'Full date-time of clock in (not just time)',
+    time_out DATETIME DEFAULT NULL COMMENT 'Full date-time of clock out (not just time)',
+	time_in_status ENUM('Present','Late','Undertime','Absent') DEFAULT NULL COMMENT 'Time In Status calculated from time ranges: Present (4am-7am), Late (7:01am-12pm), Absent (10am+)',
+	time_out_status ENUM('Out','Undertime','Overtime','On-time') DEFAULT NULL COMMENT 'Time Out Status: Undertime (1pm-4:59pm), Out (5pm-6pm), Overtime (6:01pm-8pm). On-time for backward compatibility.',
+    status VARCHAR(20) DEFAULT NULL COMMENT 'Special status: on-leave (auto-set when Municipal Admin approves leave), or overall daily status',
     notes TEXT DEFAULT NULL COMMENT 'Additional notes or remarks',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP NULL DEFAULT NULL ON UPDATE CURRENT_TIMESTAMP,
     INDEX idx_employee_id (employee_id),
     INDEX idx_date (date),
     INDEX idx_status (status),
-    UNIQUE KEY unique_attendance (employee_id, date)
+    UNIQUE KEY unique_attendance (employee_id, date) COMMENT 'One record per employee per date'
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- Department heads table (for managing department head assignments)
+-- ============================================================================
+-- DEPARTMENT HEADS TABLE
+-- ============================================================================
+-- Manages department head assignments - who heads which department
 CREATE TABLE IF NOT EXISTS department_heads (
     id INT AUTO_INCREMENT PRIMARY KEY,
     email VARCHAR(100) NOT NULL UNIQUE,
     department VARCHAR(100) NOT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP NULL DEFAULT NULL ON UPDATE CURRENT_TIMESTAMP,
-    INDEX idx_department (department)
+    INDEX idx_department (department),
+    INDEX idx_email (email)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
-
-CREATE TABLE IF NOT EXISTS fingerprints (
-	id INT(11) NOT NULL AUTO_INCREMENT,
-	employee_id VARCHAR(100) NOT NULL,
-	template LONGBLOB NOT NULL,
-	created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-	PRIMARY KEY (id),
-	INDEX (employee_id),
-	CONSTRAINT fk_fingerprints_employee
-		FOREIGN KEY (employee_id) REFERENCES users(employee_id)
-		ON DELETE CASCADE
-		ON UPDATE CASCADE
-);
-
--- Create QR tokens table for hosting-compatible token management
--- This table stores QR tokens with automatic 60-second expiration
-
-CREATE TABLE IF NOT EXISTS qr_tokens (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    token VARCHAR(255) NOT NULL UNIQUE,
-    created_at DATETIME NOT NULL,
-    expires_at DATETIME NOT NULL,
-    is_used TINYINT(1) DEFAULT 0,
-    used_by_user_id INT NULL,
-    INDEX idx_token (token),
-    INDEX idx_expires (expires_at),
-    INDEX idx_created (created_at)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
--- Add config table for QR secret if it doesn't exist
+-- ============================================================================
+-- SYSTEM CONFIG TABLE
+-- ============================================================================
+-- Stores application-wide configuration settings as key-value pairs
 CREATE TABLE IF NOT EXISTS system_config (
     config_key VARCHAR(100) PRIMARY KEY,
     config_value TEXT NOT NULL,
@@ -227,6 +281,10 @@ CREATE TABLE IF NOT EXISTS system_config (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- Insert QR secret if not exists (will be generated by application if missing)
-INSERT IGNORE INTO system_config (config_key, config_value) 
-VALUES ('QR_SECRET', '');
+-- ============================================================================
+-- END OF DATABASE SCHEMA
+-- ============================================================================
+-- This schema is ready for deployment on a fresh system
+-- No fingerprint or QR code tables - attendance is CSV-based only
+-- All time ranges finalized, leave integration complete
+-- ============================================================================

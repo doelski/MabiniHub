@@ -1,6 +1,12 @@
 <?php
+// Start output buffering to prevent any accidental output before JSON response
+ob_start();
+
 require_once __DIR__ . '/../auth_guard.php';
 require_once __DIR__ . '/../db.php';
+
+// Clean any previous output and set JSON header
+ob_clean();
 header('Content-Type: application/json');
 
 try {
@@ -8,12 +14,14 @@ try {
     require_role(['hr']);
 
     if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+        ob_clean();
         echo json_encode(['success' => false, 'error' => 'Invalid request method']);
         exit;
     }
 
     if (!isset($_FILES['file']) || $_FILES['file']['error'] !== UPLOAD_ERR_OK) {
         $err = isset($_FILES['file']) ? $_FILES['file']['error'] : 'No file uploaded';
+        ob_clean();
         echo json_encode(['success' => false, 'error' => 'Upload error: ' . $err]);
         exit;
     }
@@ -26,6 +34,7 @@ try {
     $ext = strtolower(pathinfo($name, PATHINFO_EXTENSION));
     $allowed = ['xls', 'xlsx', 'csv'];
     if (!in_array($ext, $allowed, true)) {
+        ob_clean();
         echo json_encode(['success' => false, 'error' => 'Invalid file type. Allowed: xls, xlsx, csv']);
         exit;
     }
@@ -38,17 +47,32 @@ try {
     $importsDir = $uploadDir . '/imports';
     if (!is_dir($importsDir)) {
         if (!mkdir($importsDir, 0775, true)) {
+            ob_clean();
             echo json_encode(['success' => false, 'error' => 'Failed to create import directory']);
             exit;
         }
     }
 
-    // Sanitize filename and move
+    // Sanitize filename
     $base = preg_replace('/[^A-Za-z0-9_.-]/', '_', pathinfo($name, PATHINFO_FILENAME));
-    $destName = $base . '_' . date('Ymd_His') . '_' . bin2hex(random_bytes(4)) . '.' . $ext;
+    $destName = $base . '.' . $ext;
     $destPath = $importsDir . '/' . $destName;
 
+    // DELETE all previous CSV/Excel files before saving the new one
+    // This keeps only the latest imported file in the folder
+    // Database records are always preserved (upsert logic below)
+    $previousFiles = glob($importsDir . '/*.{csv,xls,xlsx}', GLOB_BRACE);
+    if ($previousFiles !== false) {
+        foreach ($previousFiles as $oldFile) {
+            if (is_file($oldFile)) {
+                @unlink($oldFile); // Delete previous import file
+            }
+        }
+    }
+
+    // Save the new import file
     if (!move_uploaded_file($tmp, $destPath)) {
+        ob_clean();
         echo json_encode(['success' => false, 'error' => 'Failed to save uploaded file']);
         exit;
     }
@@ -69,6 +93,7 @@ try {
     if ($ext === 'csv') {
         $raw = @file_get_contents($source);
         if ($raw === false) {
+            ob_clean();
             echo json_encode(['success' => false, 'error' => 'Failed to open CSV']);
             exit;
         }
@@ -104,6 +129,7 @@ try {
         }
         if (empty($samples)) {
             fclose($fh);
+            ob_clean();
             echo json_encode(['success' => false, 'error' => 'Empty CSV file']);
             exit;
         }
@@ -133,6 +159,7 @@ try {
         }
         if ($headerRow === false || $headerRow === null) {
             fclose($fh);
+            ob_clean();
             echo json_encode(['success' => false, 'error' => 'CSV header not found']);
             exit;
         }
@@ -154,11 +181,13 @@ try {
         // Try PhpSpreadsheet for xls/xlsx
         $autoload = __DIR__ . '/../vendor/autoload.php';
         if (!file_exists($autoload)) {
+            ob_clean();
             echo json_encode(['success' => false, 'error' => 'XLS/XLSX import requires PhpSpreadsheet. Convert to CSV or install dependencies.']);
             exit;
         }
         require_once $autoload;
         if (!class_exists(\PhpOffice\PhpSpreadsheet\IOFactory::class)) {
+            ob_clean();
             echo json_encode(['success' => false, 'error' => 'XLS/XLSX import requires PhpSpreadsheet. Please run: composer require phpoffice/phpspreadsheet, or upload a CSV file.']);
             exit;
         }
@@ -186,12 +215,14 @@ try {
                 if (!$empty) $rows[] = $r;
             }
         } catch (Throwable $e) {
+            ob_clean();
             echo json_encode(['success' => false, 'error' => 'Failed to read spreadsheet: ' . $e->getMessage()]);
             exit;
         }
     }
 
     if (empty($rows)) {
+        ob_clean();
         echo json_encode(['success' => false, 'error' => 'No data rows found in file']);
         exit;
     }
@@ -208,50 +239,122 @@ try {
     $inserted = 0; $updated = 0; $skipped = 0; $errors = 0;
     $errSamples = [];
 
-    // Prepare statements
-    $sel = $pdo->prepare("SELECT id FROM attendance WHERE employee_id = :eid AND date = :dt LIMIT 1");
-    $ins = $pdo->prepare("INSERT INTO attendance (employee_id, date, time_in, time_in_status, time_out, time_out_status) VALUES (:eid, :dt, :tin, :tin_status, :tout, :tout_status)");
-    $upd = $pdo->prepare("UPDATE attendance SET time_in = :tin, time_in_status = :tin_status, time_out = :tout, time_out_status = :tout_status WHERE id = :id");
+    // Use INSERT ... ON DUPLICATE KEY UPDATE for guaranteed upsert
+    // This ensures ALL fields are updated when re-importing (based on UNIQUE key: employee_id, date)
+    $upsertStmt = $pdo->prepare("
+        INSERT INTO attendance 
+        (employee_id, date, time_in, time_in_status, time_out, time_out_status, status, created_at, updated_at)
+        VALUES (:eid, :dt, :tin, :tin_status, :tout, :tout_status, :status, NOW(), NOW())
+        ON DUPLICATE KEY UPDATE
+            time_in = VALUES(time_in),
+            time_in_status = VALUES(time_in_status),
+            time_out = VALUES(time_out),
+            time_out_status = VALUES(time_out_status),
+            status = VALUES(status),
+            updated_at = NOW()
+    ");
+    
+    // Check if record exists and fetch current status (to preserve on-leave status)
+    $checkStmt = $pdo->prepare("SELECT id, status FROM attendance WHERE employee_id = :eid AND date = :dt LIMIT 1");
 
-    // Helper to resolve employee identifier to users.employee_id
+    // Helper to validate and resolve employee_id (MUST exist in users table)
     $resolveEmployeeId = function($rawId) use ($pdo) {
         $val = trim((string)$rawId);
         if ($val === '') return null;
-        // If looks like numeric user id, map to employee_id
+        
+        // First, try to match as employee_id directly (most common case)
+        $stmt = $pdo->prepare('SELECT employee_id FROM users WHERE employee_id = ? AND status = "approved" LIMIT 1');
+        $stmt->execute([$val]);
+        $empId = $stmt->fetchColumn();
+        if ($empId) return $empId;
+        
+        // If not found and looks like numeric user id, try to map via users.id
         if (ctype_digit($val)) {
-            $stmt = $pdo->prepare('SELECT employee_id FROM users WHERE id = ? LIMIT 1');
-            $stmt->execute([$val]);
-            $empId = $stmt->fetchColumn();
-            if ($empId) return $empId;
+            $stmt2 = $pdo->prepare('SELECT employee_id FROM users WHERE id = ? AND status = "approved" LIMIT 1');
+            $stmt2->execute([$val]);
+            $empId2 = $stmt2->fetchColumn();
+            if ($empId2) return $empId2;
         }
-        // Otherwise, if matches an existing employee_id, keep canonical form
-        $stmt2 = $pdo->prepare('SELECT employee_id FROM users WHERE employee_id = ? LIMIT 1');
-        $stmt2->execute([$val]);
-        $empId2 = $stmt2->fetchColumn();
-        if ($empId2) return $empId2;
-        return $val; // fallback to provided value
+        
+        // Not found in database - return null to skip this record
+        return null;
     };
 
     foreach ($rows as $idx => $r) {
         try {
             // Flexible keys
             $eidRaw = $mapField($r, ['employee_id','emp_id','employee_number','employee_code','employee','id']);
-            $eid = $resolveEmployeeId($eidRaw);
             $dateVal = $mapField($r, ['date','attendance_date','day']);
             $timeInVal = $mapField($r, ['time_in','in','check_in']);
             $timeOutVal = $mapField($r, ['time_out','out','check_out']);
-            // Ignore CSV status fields; we'll compute based on time values
+
+            // Validate employee_id and date first
+            if (!$eidRaw || !$dateVal) { 
+                $skipped++; 
+                if (count($errSamples) < 5) {
+                    $errSamples[] = 'Row '.($idx+2).': Missing employee_id or date';
+                }
+                continue; 
+            }
+
+            // Resolve and validate employee_id exists in database
+            $eid = $resolveEmployeeId($eidRaw);
+            if (!$eid) { 
+                $skipped++; 
+                if (count($errSamples) < 5) {
+                    $errSamples[] = 'Row '.($idx+2).': Employee ID "'.$eidRaw.'" not found in system';
+                }
+                continue; 
+            }
+            
             $tinStatus = null;
             $toutStatus = null;
 
-            if (!$eid || !$dateVal) { $skipped++; continue; }
+            // Normalize date to Y-m-d with STRICT DD/MM/YYYY parsing
+            $date = null;
+            $dateStr = trim((string)$dateVal);
+            
+            // PRIORITY: DD/MM/YYYY format (10/02/2026 = Feb 10, 2026)
+            // This is the ONLY format we accept to avoid ambiguity
+            $dt = DateTime::createFromFormat('d/m/Y', $dateStr);
+            if ($dt !== false) {
+                // Strict validation: ensure the parsed date matches input exactly
+                $errors = DateTime::getLastErrors();
+                if ($errors['warning_count'] == 0 && $errors['error_count'] == 0) {
+                    $date = $dt->format('Y-m-d');
+                }
+            }
+            
+            // If DD/MM/YYYY failed, try other formats as fallback
+            if (!$date) {
+                $fallbackFormats = [
+                    'Y-m-d',    // 2026-02-10 (already formatted)
+                    'd-m-Y',    // 10-02-2026
+                    'Y/m/d',    // 2026/02/10
+                ];
+                
+                foreach ($fallbackFormats as $format) {
+                    $dt = DateTime::createFromFormat($format, $dateStr);
+                    if ($dt !== false) {
+                        $errors = DateTime::getLastErrors();
+                        if ($errors['warning_count'] == 0 && $errors['error_count'] == 0) {
+                            $date = $dt->format('Y-m-d');
+                            break;
+                        }
+                    }
+                }
+            }
+            
+            // Skip if date could not be parsed
+            if (!$date) { 
+                $skipped++; 
+                if (count($errSamples) < 5) {
+                    $errSamples[] = 'Row '.($idx+2).': Invalid date format "'.$dateStr.'" - use DD/MM/YYYY (e.g., 10/02/2026)';
+                }
+                continue; 
+            }
 
-            // Normalize date to Y-m-d
-            $tsDate = strtotime((string)$dateVal);
-            if ($tsDate === false) { $skipped++; continue; }
-            $date = date('Y-m-d', $tsDate);
-
-            // Normalize time fields to Y-m-d H:i:s or null
+            // Normalize time fields to Y-m-d H:i:s (DATETIME format) or null
             $timeIn = null; $timeOut = null;
             if ($timeInVal !== null && $timeInVal !== '') {
                 $t = strtotime((string)$timeInVal);
@@ -262,87 +365,102 @@ try {
                 if ($t !== false) $timeOut = date('Y-m-d H:i:s', strtotime($date.' '.date('H:i:s', $t)));
             }
 
-            // Normalize statuses
-            $normStatus = function($s){
-                if ($s === null) return null;
-                $s = trim((string)$s);
-                if ($s === '') return null;
-                $s = ucfirst(strtolower($s));
-                // Map some aliases
-                $aliases = [
-                    'ontime' => 'On-time', 'on-time' => 'On-time', 'on time' => 'On-time',
-                    'out' => 'Out', 'overtime' => 'Overtime', 'undertime' => 'Undertime',
-                    'present' => 'Present', 'late' => 'Late', 'absent' => 'Absent', 'forgotten' => 'Forgotten'
-                ];
-                $key = strtolower($s);
-                return $aliases[$key] ?? $s;
-            };
-
-            // Derive statuses purely from time values (align with recalc rules)
+            // FINALIZED TIME RANGE LOGIC
+            // TIME IN: 4am-7am=Present, 7:01am-12pm=Late, 10am+=Absent
+            // TIME OUT: 1pm-4:59pm=Undertime, 5pm-6pm=Out, 6:01pm-8pm=Overtime
+            
+            $tinStatus = null;
             if ($timeIn) {
                 $tIn = strtotime($timeIn);
-                $present_start = strtotime($date . ' 06:00:00'); // 6:00 AM
-                $present_end   = strtotime($date . ' 08:00:00'); // 8:00 AM
+                $present_start = strtotime($date . ' 04:00:00'); // 4:00 AM
+                $present_end   = strtotime($date . ' 07:00:00'); // 7:00 AM
                 $late_end      = strtotime($date . ' 12:00:00'); // 12:00 PM
-                $undertime_end = strtotime($date . ' 17:00:00'); // 5:00 PM
+                $absent_cutoff = strtotime($date . ' 10:00:00'); // 10:00 AM
 
-                if ($tIn < $present_start) {
-                    $tinStatus = 'Present';
-                } elseif ($tIn <= $present_end) {
-                    $tinStatus = 'Present';
-                } elseif ($tIn <= $late_end) {
-                    $tinStatus = 'Late';
-                } elseif ($tIn <= $undertime_end) {
-                    $tinStatus = 'Undertime';
-                } else {
+                if ($tIn >= $absent_cutoff) {
+                    // 10:00 AM or later = Absent
                     $tinStatus = 'Absent';
+                } elseif ($tIn >= $present_start && $tIn <= $present_end) {
+                    // 4:00 AM - 7:00 AM = Present
+                    $tinStatus = 'Present';
+                } elseif ($tIn > $present_end && $tIn <= $late_end) {
+                    // 7:01 AM - 12:00 PM = Late
+                    $tinStatus = 'Late';
+                } else {
+                    // Before 4:00 AM = Present (very early)
+                    $tinStatus = 'Present';
                 }
             } else {
                 $tinStatus = 'Absent';
             }
 
+            $toutStatus = null;
             if ($timeOut) {
                 $tOut = strtotime($timeOut);
-                $undertime_end = strtotime($date . ' 16:59:59'); // 4:59:59 PM
-                $out_start     = strtotime($date . ' 17:00:00');   // 5:00 PM
-                $out_end       = strtotime($date . ' 17:05:00');   // 5:05 PM
-                $overtime_start= strtotime($date . ' 18:00:00');   // 6:00 PM
+                $undertime_start = strtotime($date . ' 13:00:00'); // 1:00 PM
+                $undertime_end   = strtotime($date . ' 16:59:59'); // 4:59:59 PM
+                $out_start       = strtotime($date . ' 17:00:00'); // 5:00 PM
+                $out_end         = strtotime($date . ' 18:00:00'); // 6:00 PM
+                $overtime_start  = strtotime($date . ' 18:00:01'); // 6:01 PM
+                $overtime_end    = strtotime($date . ' 20:00:00'); // 8:00 PM
 
-                if ($tOut <= $undertime_end) {
+                if ($tOut >= $undertime_start && $tOut <= $undertime_end) {
+                    // 1:00 PM - 4:59 PM = Undertime
                     $toutStatus = 'Undertime';
                 } elseif ($tOut >= $out_start && $tOut <= $out_end) {
+                    // 5:00 PM - 6:00 PM = Out
                     $toutStatus = 'Out';
-                } elseif ($tOut >= $overtime_start) {
+                } elseif ($tOut >= $overtime_start && $tOut <= $overtime_end) {
+                    // 6:01 PM - 8:00 PM = Overtime
                     $toutStatus = 'Overtime';
                 } else {
                     $toutStatus = 'Out';
                 }
-            } else {
-                $toutStatus = null; // no time out
             }
 
-            // Apply upsert
-            $sel->execute([':eid' => $eid, ':dt' => $date]);
-            $existingId = $sel->fetchColumn();
+            // Calculate overall daily status
+            $dailyStatus = 'absent'; // default
+            if ($tinStatus === 'Absent' || !$timeIn) {
+                $dailyStatus = 'absent';
+            } elseif ($toutStatus === 'Undertime') {
+                $dailyStatus = 'undertime';
+            } elseif ($tinStatus === 'Late') {
+                $dailyStatus = 'late';
+            } elseif ($tinStatus === 'Present') {
+                $dailyStatus = 'present';
+            }
+
+            // Apply UPSERT: This will INSERT or UPDATE if record exists
+            // Based on UNIQUE constraint (employee_id, date)
+            
+            // First check if record exists and get current status
+            $checkStmt->execute([':eid' => $eid, ':dt' => $date]);
+            $existing = $checkStmt->fetch(PDO::FETCH_ASSOC);
+            $existingId = $existing ? $existing['id'] : null;
+            $existingStatus = $existing ? trim(strtolower($existing['status'] ?? '')) : '';
+            
+            // PRESERVE on-leave status - don't overwrite with calculated status from CSV
+            $finalStatus = $dailyStatus;
+            if ($existingStatus === 'on-leave' || $existingStatus === 'on leave' || $existingStatus === 'leave') {
+                // Employee is on approved leave - keep that status, don't mark as absent
+                $finalStatus = 'on-leave';
+            }
+            
+            // Execute upsert - will update all fields if duplicate key found
+            $upsertStmt->execute([
+                ':eid' => $eid,
+                ':dt' => $date,
+                ':tin' => $timeIn,
+                ':tin_status' => $tinStatus,
+                ':tout' => $timeOut,
+                ':tout_status' => $toutStatus,
+                ':status' => $finalStatus,
+            ]);
+            
             if ($existingId) {
-                $upd->execute([
-                    ':tin' => $timeIn,
-                    ':tin_status' => $tinStatus,
-                    ':tout' => $timeOut,
-                    ':tout_status' => $toutStatus,
-                    ':id' => $existingId,
-                ]);
-                $updated++;
+                $updated++; // Record was updated
             } else {
-                $ins->execute([
-                    ':eid' => $eid,
-                    ':dt' => $date,
-                    ':tin' => $timeIn,
-                    ':tin_status' => $tinStatus,
-                    ':tout' => $timeOut,
-                    ':tout_status' => $toutStatus,
-                ]);
-                $inserted++;
+                $inserted++; // Record was newly inserted
             }
         } catch (Throwable $rowErr) {
             $errors++;
@@ -354,6 +472,8 @@ try {
 
     $pdo->commit();
 
+    // Clean any buffered output before sending JSON
+    ob_clean();
     echo json_encode([
         'success' => true,
         'message' => 'Import completed',
@@ -365,8 +485,11 @@ try {
         ],
         'error_samples' => $errSamples,
     ]);
+    ob_end_flush();
 } catch (Throwable $e) {
     if (isset($pdo) && $pdo instanceof PDO && $pdo->inTransaction()) { $pdo->rollBack(); }
+    ob_clean();
     http_response_code(500);
     echo json_encode(['success' => false, 'error' => 'Server error: ' . $e->getMessage()]);
+    ob_end_flush();
 }

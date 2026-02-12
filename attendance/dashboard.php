@@ -227,6 +227,9 @@ require_role(['hr', 'department_head', 'employee']);
         <button class="status-btn" data-status="Overtime" style="padding: 12px 24px; background: #3b82f6; color: #fff; border: none; border-radius: 8px; cursor: pointer; font-weight: 600; font-family: 'Poppins', sans-serif; font-size: 14px; transition: all 0.3s;">
             <i class="fas fa-clock"></i> Overtime
         </button>
+        <button class="status-btn" data-status="on-leave" style="padding: 12px 24px; background: #a855f7; color: #fff; border: none; border-radius: 8px; cursor: pointer; font-weight: 600; font-family: 'Poppins', sans-serif; font-size: 14px; transition: all 0.3s;">
+            <i class="fas fa-umbrella-beach"></i> On Leave
+        </button>
     </div>
 
     <!-- Attendance Records Section -->
@@ -288,6 +291,7 @@ require_role(['hr', 'department_head', 'employee']);
                             <th style="padding: 16px; text-align: left; font-weight: 700; color: #374151; text-transform: uppercase; font-size: 12px; letter-spacing: 0.5px; border-bottom: 2px solid #e5e7eb;">Time In Status</th>
                             <th style="padding: 16px; text-align: left; font-weight: 700; color: #374151; text-transform: uppercase; font-size: 12px; letter-spacing: 0.5px; border-bottom: 2px solid #e5e7eb;">Time Out</th>
                             <th style="padding: 16px; text-align: left; font-weight: 700; color: #374151; text-transform: uppercase; font-size: 12px; letter-spacing: 0.5px; border-bottom: 2px solid #e5e7eb;">Time Out Status</th>
+                            <th style="padding: 16px; text-align: left; font-weight: 700; color: #374151; text-transform: uppercase; font-size: 12px; letter-spacing: 0.5px; border-bottom: 2px solid #e5e7eb;">Status</th>
                         </tr>
                     </thead>
                     <tbody id="records-tbody">
@@ -409,11 +413,11 @@ require_role(['hr', 'department_head', 'employee']);
                     currentRecords = data.records;
                     renderRecords(currentRecords);
                 } else {
-                    document.getElementById('records-tbody').innerHTML = '<tr><td colspan="8" style="text-align: center; padding: 40px; color: #ef4444;"><i class="fas fa-exclamation-triangle"></i> Error: ' + (data.error || 'Failed to load') + '</td></tr>';
+                    document.getElementById('records-tbody').innerHTML = '<tr><td colspan="9" style="text-align: center; padding: 40px; color: #ef4444;"><i class="fas fa-exclamation-triangle"></i> Error: ' + (data.error || 'Failed to load') + '</td></tr>';
                 }
             } catch(err) {
                 console.error('Records fetch error:', err);
-                document.getElementById('records-tbody').innerHTML = '<tr><td colspan="8" style="text-align: center; padding: 40px; color: #ef4444;"><i class="fas fa-exclamation-triangle"></i> Connection error. Please check if the database is running.</td></tr>';
+                document.getElementById('records-tbody').innerHTML = '<tr><td colspan="9" style="text-align: center; padding: 40px; color: #ef4444;"><i class="fas fa-exclamation-triangle"></i> Connection error. Please check if the database is running.</td></tr>';
             }
         }
 
@@ -424,7 +428,7 @@ require_role(['hr', 'department_head', 'employee']);
             if(records.length === 0){
                 let msg = 'No attendance records found';
                 if(statusFilter !== 'all') msg += ' for status: ' + statusFilter;
-                tbody.innerHTML = '<tr><td colspan="8" style="text-align: center; padding: 40px; color: #6b7280;"><i class="fas fa-info-circle"></i> ' + msg + '</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="9" style="text-align: center; padding: 40px; color: #6b7280;"><i class="fas fa-info-circle"></i> ' + msg + '</td></tr>';
                 expandBtn.style.display = 'none';
                 return;
             }
@@ -458,17 +462,23 @@ require_role(['hr', 'department_head', 'employee']);
                             late: 0,
                             absent: 0,
                             undertime: 0,
-                            overtime: 0
+                            overtime: 0,
+                            onLeave: 0
                         });
                     }
                     const emp = employeeMap.get(empId);
                     emp.records.push(rec);
                     
-                    // Count statuses
-                    const timeInStatus = rec.time_in_status || 'Absent';
-                    if(timeInStatus === 'Present') emp.present++;
-                    else if(timeInStatus === 'Late') emp.late++;
-                    else if(timeInStatus === 'Absent') emp.absent++;
+                    // Count statuses - PRIORITY: Check database status field first
+                    const dbStatus = (rec.status || '').toLowerCase().trim();
+                    if(dbStatus === 'on-leave' || dbStatus === 'on leave' || dbStatus === 'leave') {
+                        emp.onLeave++;
+                    } else {
+                        const timeInStatus = rec.time_in_status || 'Absent';
+                        if(timeInStatus === 'Present') emp.present++;
+                        else if(timeInStatus === 'Late') emp.late++;
+                        else if(timeInStatus === 'Absent') emp.absent++;
+                    }
                     
                     if(rec.time_out_status === 'Undertime') emp.undertime++;
                     if(rec.time_out_status === 'Overtime') emp.overtime++;
@@ -506,11 +516,12 @@ require_role(['hr', 'department_head', 'employee']);
                         <td style="padding: 16px;"><i class="fas ${chevronClass}" style="margin-right: 8px; transition: transform 0.3s;"></i><strong>${emp.employee_id}</strong></td>
                         <td style="padding: 16px;">${emp.name}</td>
                         <td style="padding: 16px;">${emp.department}</td>
-                        <td colspan="5" style="padding: 16px;">
+                        <td colspan="6" style="padding: 16px;">
                             <div style="display: flex; gap: 12px; flex-wrap: wrap;">
                                 <span style="padding: 4px 10px; border-radius: 6px; font-size: 11px; background: #dcfce7; color: #16a34a;"><i class="fas fa-check-circle"></i> Present: ${emp.present}</span>
                                 <span style="padding: 4px 10px; border-radius: 6px; font-size: 11px; background: #fef3c7; color: #d97706;"><i class="fas fa-clock"></i> Late: ${emp.late}</span>
                                 <span style="padding: 4px 10px; border-radius: 6px; font-size: 11px; background: #fee2e2; color: #dc2626;"><i class="fas fa-times-circle"></i> Absent: ${emp.absent}</span>
+                                <span style="padding: 4px 10px; border-radius: 6px; font-size: 11px; background: #e9d5ff; color: #9333ea;"><i class="fas fa-umbrella-beach"></i> On Leave: ${emp.onLeave}</span>
                                 <span style="padding: 4px 10px; border-radius: 6px; font-size: 11px; background: #fed7aa; color: #ea580c;"><i class="fas fa-hourglass-half"></i> Undertime: ${emp.undertime}</span>
                                 <span style="padding: 4px 10px; border-radius: 6px; font-size: 11px; background: #dbeafe; color: #2563eb;"><i class="fas fa-clock"></i> Overtime: ${emp.overtime}</span>
                                 <span style="padding: 4px 10px; border-radius: 6px; font-size: 11px; background: #e0e7ff; color: #4338ca;">Total Days: ${emp.records.length}</span>
@@ -523,37 +534,79 @@ require_role(['hr', 'department_head', 'employee']);
                     const detailsTr = document.createElement('tr');
                     detailsTr.style.display = isExpanded ? '' : 'none';
                     detailsTr.innerHTML = `
-                        <td colspan="8" style="padding: 0;">
+                        <td colspan="9" style="padding: 0;">
                             <table style="width: 100%; margin: 0;">
                                 <tbody>
                                     ${emp.records.map(rec => {
                                         const timeIn = rec.time_in ? new Date(rec.time_in).toLocaleTimeString() : '-';
                                         const timeOut = rec.time_out ? new Date(rec.time_out).toLocaleTimeString() : '-';
                                         
-                                        const timeInStatus = rec.time_in_status || 'Absent';
-                                        let timeInBg = '#fee2e2';
-                                        let timeInColor = '#dc2626';
-                                        if(timeInStatus === 'Present') { timeInBg = '#dcfce7'; timeInColor = '#16a34a'; }
-                                        else if(timeInStatus === 'Late') { timeInBg = '#fef3c7'; timeInColor = '#d97706'; }
-                                        else if(timeInStatus === 'Undertime') { timeInBg = '#fde68a'; timeInColor = '#b45309'; }
+                                        // Check if on-leave FIRST
+                                        const dbStatus = (rec.status || '').toLowerCase().trim();
+                                        const isOnLeave = (dbStatus === 'on-leave' || dbStatus === 'on leave' || dbStatus === 'leave');
                                         
-                                        const timeOutStatus = rec.time_out_status || '-';
+                                        // Time In Status - hide if on leave
+                                        let timeInStatus = '-';
+                                        let timeInBg = '#f3f4f6';
+                                        let timeInColor = '#6b7280';
+                                        if(!isOnLeave) {
+                                            timeInStatus = rec.time_in_status || 'Absent';
+                                            timeInBg = '#fee2e2';
+                                            timeInColor = '#dc2626';
+                                            if(timeInStatus === 'Present') { timeInBg = '#dcfce7'; timeInColor = '#16a34a'; }
+                                            else if(timeInStatus === 'Late') { timeInBg = '#fef3c7'; timeInColor = '#d97706'; }
+                                            else if(timeInStatus === 'Undertime') { timeInBg = '#fde68a'; timeInColor = '#b45309'; }
+                                        }
+                                        
+                                        // Time Out Status - hide if on leave
+                                        let timeOutStatus = '-';
                                         let timeOutBg = '#f3f4f6';
                                         let timeOutColor = '#6b7280';
-                                        if(timeOutStatus === 'On-time' || timeOutStatus === 'Out') { timeOutBg = '#d1fae5'; timeOutColor = '#059669'; }
-                                        else if(timeOutStatus === 'Undertime') { timeOutBg = '#fed7aa'; timeOutColor = '#ea580c'; }
-                                        else if(timeOutStatus === 'Overtime') { timeOutBg = '#dbeafe'; timeOutColor = '#2563eb'; }
+                                        if(!isOnLeave) {
+                                            timeOutStatus = rec.time_out_status || '-';
+                                            if(timeOutStatus === 'On-time' || timeOutStatus === 'Out') { timeOutBg = '#d1fae5'; timeOutColor = '#059669'; }
+                                            else if(timeOutStatus === 'Undertime') { timeOutBg = '#fed7aa'; timeOutColor = '#ea580c'; }
+                                            else if(timeOutStatus === 'Overtime') { timeOutBg = '#dbeafe'; timeOutColor = '#2563eb'; }
+                                        }
+                                        
+                                        // Overall Status
+                                        let overallStatus = 'Present';
+                                        let statusBg = '#dcfce7';
+                                        let statusColor = '#16a34a';
+                                        
+                                        if(isOnLeave) {
+                                            overallStatus = 'ON LEAVE';
+                                            statusBg = '#e9d5ff';
+                                            statusColor = '#9333ea';
+                                        } else if(timeInStatus === 'Absent' || !rec.time_in) {
+                                            overallStatus = 'ABSENT';
+                                            statusBg = '#fee2e2';
+                                            statusColor = '#dc2626';
+                                        } else if(timeOutStatus === 'Undertime') {
+                                            overallStatus = 'UNDERTIME';
+                                            statusBg = '#fed7aa';
+                                            statusColor = '#ea580c';
+                                        } else if(timeOutStatus === 'Overtime') {
+                                            overallStatus = 'OVERTIME';
+                                            statusBg = '#dbeafe';
+                                            statusColor = '#2563eb';
+                                        } else if(timeInStatus === 'Late') {
+                                            overallStatus = 'LATE';
+                                            statusBg = '#fef3c7';
+                                            statusColor = '#d97706';
+                                        }
                                         
                                         return `
                                             <tr style="background: #fafafa; border-bottom: 1px solid #e5e7eb;">
-                                                <td style="padding: 12px 16px; padding-left: 48px; width: 12.5%;"></td>
-                                                <td style="padding: 12px 16px; width: 12.5%;"></td>
-                                                <td style="padding: 12px 16px; width: 12.5%;"></td>
-                                                <td style="padding: 12px 16px; width: 12.5%;"><strong>${rec.date || ''}</strong></td>
-                                                <td style="padding: 12px 16px; width: 12.5%;">${timeIn}</td>
-                                                <td style="padding: 12px 16px; width: 12.5%;"><span style="padding: 4px 8px; border-radius: 4px; font-size: 11px; font-weight: 700; text-transform: uppercase; background: ${timeInBg}; color: ${timeInColor};">${timeInStatus}</span></td>
-                                                <td style="padding: 12px 16px; width: 12.5%;">${timeOut}</td>
-                                                <td style="padding: 12px 16px; width: 12.5%;"><span style="padding: 4px 8px; border-radius: 4px; font-size: 11px; font-weight: 700; text-transform: uppercase; background: ${timeOutBg}; color: ${timeOutColor};">${timeOutStatus}</span></td>
+                                                <td style="padding: 12px 16px; padding-left: 48px; width: 11.1%;"></td>
+                                                <td style="padding: 12px 16px; width: 11.1%;"></td>
+                                                <td style="padding: 12px 16px; width: 11.1%;"></td>
+                                                <td style="padding: 12px 16px; width: 11.1%;"><strong>${rec.date || ''}</strong></td>
+                                                <td style="padding: 12px 16px; width: 11.1%;">${timeIn}</td>
+                                                <td style="padding: 12px 16px; width: 11.1%;">${timeInStatus === '-' ? '<span style="color: #9ca3af;">—</span>' : `<span style="padding: 4px 8px; border-radius: 4px; font-size: 11px; font-weight: 700; text-transform: uppercase; background: ${timeInBg}; color: ${timeInColor};">${timeInStatus}</span>`}</td>
+                                                <td style="padding: 12px 16px; width: 11.1%;">${timeOut}</td>
+                                                <td style="padding: 12px 16px; width: 11.1%;">${timeOutStatus === '-' ? '<span style="color: #9ca3af;">—</span>' : `<span style="padding: 4px 8px; border-radius: 4px; font-size: 11px; font-weight: 700; text-transform: uppercase; background: ${timeOutBg}; color: ${timeOutColor};">${timeOutStatus}</span>`}</td>
+                                                <td style="padding: 12px 16px; width: 11.1%;"><span style="padding: 4px 8px; border-radius: 4px; font-size: 11px; font-weight: 700; text-transform: uppercase; background: ${statusBg}; color: ${statusColor};">${overallStatus}</span></td>
                                             </tr>
                                         `;
                                     }).join('')}
@@ -576,21 +629,64 @@ require_role(['hr', 'department_head', 'employee']);
                     const timeIn = rec.time_in ? new Date(rec.time_in).toLocaleTimeString() : '-';
                     const timeOut = rec.time_out ? new Date(rec.time_out).toLocaleTimeString() : '-';
                     
-                    // Time In Status
-                    const timeInStatus = rec.time_in_status || 'Absent';
-                    let timeInBg = '#fee2e2';
-                    let timeInColor = '#dc2626';
-                    if(timeInStatus === 'Present') { timeInBg = '#dcfce7'; timeInColor = '#16a34a'; }
-                    else if(timeInStatus === 'Late') { timeInBg = '#fef3c7'; timeInColor = '#d97706'; }
-                    else if(timeInStatus === 'Undertime') { timeInBg = '#fde68a'; timeInColor = '#b45309'; }
+                    // Check if on-leave FIRST
+                    const dbStatus = (rec.status || '').toLowerCase().trim();
+                    const isOnLeave = (dbStatus === 'on-leave' || dbStatus === 'on leave' || dbStatus === 'leave');
                     
-                    // Time Out Status
-                    const timeOutStatus = rec.time_out_status || '-';
+                    // Time In Status - hide if on leave
+                    let timeInStatus = '-';
+                    let timeInBg = '#f3f4f6';
+                    let timeInColor = '#6b7280';
+                    if(!isOnLeave) {
+                        timeInStatus = rec.time_in_status || 'Absent';
+                        timeInBg = '#fee2e2';
+                        timeInColor = '#dc2626';
+                        if(timeInStatus === 'Present') { timeInBg = '#dcfce7'; timeInColor = '#16a34a'; }
+                        else if(timeInStatus === 'Late') { timeInBg = '#fef3c7'; timeInColor = '#d97706'; }
+                        else if(timeInStatus === 'Undertime') { timeInBg = '#fde68a'; timeInColor = '#b45309'; }
+                    }
+                    
+                    // Time Out Status - hide if on leave
+                    let timeOutStatus = '-';
                     let timeOutBg = '#f3f4f6';
                     let timeOutColor = '#6b7280';
-                    if(timeOutStatus === 'On-time' || timeOutStatus === 'Out') { timeOutBg = '#d1fae5'; timeOutColor = '#059669'; }
-                    else if(timeOutStatus === 'Undertime') { timeOutBg = '#fed7aa'; timeOutColor = '#ea580c'; }
-                    else if(timeOutStatus === 'Overtime') { timeOutBg = '#dbeafe'; timeOutColor = '#2563eb'; }
+                    if(!isOnLeave) {
+                        timeOutStatus = rec.time_out_status || '-';
+                        if(timeOutStatus === 'On-time' || timeOutStatus === 'Out') { timeOutBg = '#d1fae5'; timeOutColor = '#059669'; }
+                        else if(timeOutStatus === 'Undertime') { timeOutBg = '#fed7aa'; timeOutColor = '#ea580c'; }
+                        else if(timeOutStatus === 'Overtime') { timeOutBg = '#dbeafe'; timeOutColor = '#2563eb'; }
+                    }
+                    
+                    // Overall Status
+                    let overallStatus = 'Present';
+                    let statusBg = '#dcfce7';
+                    let statusColor = '#16a34a';
+                    
+                    if(isOnLeave) {
+                        overallStatus = 'ON LEAVE';
+                        statusBg = '#e9d5ff';
+                        statusColor = '#9333ea';
+                    } else if(timeInStatus === 'Absent' || (!rec.time_in && !isOnLeave)) {
+                        overallStatus = 'ABSENT';
+                        statusBg = '#fee2e2';
+                        statusColor = '#dc2626';
+                    } else if(timeOutStatus === 'Undertime') {
+                        overallStatus = 'UNDERTIME';
+                        statusBg = '#fed7aa';
+                        statusColor = '#ea580c';
+                    } else if(timeOutStatus === 'Overtime') {
+                        overallStatus = 'OVERTIME';
+                        statusBg = '#dbeafe';
+                        statusColor = '#2563eb';
+                    } else if(timeInStatus === 'Late') {
+                        overallStatus = 'LATE';
+                        statusBg = '#fef3c7';
+                        statusColor = '#d97706';
+                    } else if(timeInStatus === 'Present') {
+                        overallStatus = 'PRESENT';
+                        statusBg = '#dcfce7';
+                        statusColor = '#16a34a';
+                    }
                     
                     tr.innerHTML = `
                         <td style="padding: 16px;"><strong>${rec.employee_id || ''}</strong></td>
@@ -598,9 +694,10 @@ require_role(['hr', 'department_head', 'employee']);
                         <td style="padding: 16px;">${rec.department || ''}</td>
                         <td style="padding: 16px;">${rec.date || ''}</td>
                         <td style="padding: 16px;">${timeIn}</td>
-                        <td style="padding: 16px;"><span style="padding: 6px 12px; border-radius: 6px; font-size: 12px; font-weight: 700; text-transform: uppercase; background: ${timeInBg}; color: ${timeInColor};">${timeInStatus}</span></td>
+                        <td style="padding: 16px;">${timeInStatus === '-' ? '<span style="color: #9ca3af;">—</span>' : `<span style="padding: 6px 12px; border-radius: 6px; font-size: 12px; font-weight: 700; text-transform: uppercase; background: ${timeInBg}; color: ${timeInColor};">${timeInStatus}</span>`}</td>
                         <td style="padding: 16px;">${timeOut}</td>
-                        <td style="padding: 16px;"><span style="padding: 6px 12px; border-radius: 6px; font-size: 12px; font-weight: 700; text-transform: uppercase; background: ${timeOutBg}; color: ${timeOutColor};">${timeOutStatus}</span></td>
+                        <td style="padding: 16px;">${timeOutStatus === '-' ? '<span style="color: #9ca3af;">—</span>' : `<span style="padding: 6px 12px; border-radius: 6px; font-size: 12px; font-weight: 700; text-transform: uppercase; background: ${timeOutBg}; color: ${timeOutColor};">${timeOutStatus}</span>`}</td>
+                        <td style="padding: 16px;"><span style="padding: 6px 12px; border-radius: 6px; font-size: 12px; font-weight: 700; text-transform: uppercase; background: ${statusBg}; color: ${statusColor};">${overallStatus}</span></td>
                     `;
                     tbody.appendChild(tr);
                 });
@@ -622,9 +719,27 @@ require_role(['hr', 'department_head', 'employee']);
 
         function exportCSV(){
             if(currentRecords.length === 0){ alert('No data to export'); return; }
-            let csv = 'Employee ID,Name,Department,Date,Time In,Time In Status,Time Out,Time Out Status\n';
+            let csv = 'Employee ID,Name,Department,Date,Time In,Time In Status,Time Out,Time Out Status,Status\n';
             currentRecords.forEach(rec=>{
-                csv += `"${rec.employee_id || ''}","${rec.name || ''}","${rec.department || ''}","${rec.date || ''}","${rec.time_in || ''}","${rec.time_in_status || 'Absent'}","${rec.time_out || ''}","${rec.time_out_status || ''}"\n`;
+                const dbStatus = (rec.status || '').toLowerCase().trim();
+                const isOnLeave = (dbStatus === 'on-leave' || dbStatus === 'on leave' || dbStatus === 'leave');
+                
+                let timeInStatus = isOnLeave ? '' : (rec.time_in_status || 'Absent');
+                let timeOutStatus = isOnLeave ? '' : (rec.time_out_status || '');
+                
+                let overallStatus = 'Present';
+                if(isOnLeave) {
+                    overallStatus = 'On Leave';
+                } else if(!rec.time_in || rec.time_in_status === 'Absent') {
+                    overallStatus = 'Absent';
+                } else if(rec.time_out_status === 'Undertime') {
+                    overallStatus = 'Undertime';
+                } else if(rec.time_out_status === 'Overtime') {
+                    overallStatus = 'Overtime';
+                } else if(rec.time_in_status === 'Late') {
+                    overallStatus = 'Late';
+                }
+                csv += `"${rec.employee_id || ''}","${rec.name || ''}","${rec.department || ''}","${rec.date || ''}","${rec.time_in || ''}","${timeInStatus}","${rec.time_out || ''}","${timeOutStatus}","${overallStatus}"\n`;
             });
             downloadFile(csv, 'attendance_' + getDateRangeLabel() + '.csv', 'text/csv');
         }
@@ -632,9 +747,27 @@ require_role(['hr', 'department_head', 'employee']);
         function exportExcel(){
             if(currentRecords.length === 0){ alert('No data to export'); return; }
             let html = '<html><head><meta charset="utf-8"></head><body><table border="1">';
-            html += '<tr><th>Employee ID</th><th>Name</th><th>Department</th><th>Date</th><th>Time In</th><th>Time In Status</th><th>Time Out</th><th>Time Out Status</th></tr>';
+            html += '<tr><th>Employee ID</th><th>Name</th><th>Department</th><th>Date</th><th>Time In</th><th>Time In Status</th><th>Time Out</th><th>Time Out Status</th><th>Status</th></tr>';
             currentRecords.forEach(rec=>{
-                html += `<tr><td>${rec.employee_id || ''}</td><td>${rec.name || ''}</td><td>${rec.department || ''}</td><td>${rec.date || ''}</td><td>${rec.time_in || ''}</td><td>${rec.time_in_status || 'Absent'}</td><td>${rec.time_out || ''}</td><td>${rec.time_out_status || ''}</td></tr>`;
+                const dbStatus = (rec.status || '').toLowerCase().trim();
+                const isOnLeave = (dbStatus === 'on-leave' || dbStatus === 'on leave' || dbStatus === 'leave');
+                
+                let timeInStatus = isOnLeave ? '' : (rec.time_in_status || 'Absent');
+                let timeOutStatus = isOnLeave ? '' : (rec.time_out_status || '');
+                
+                let overallStatus = 'Present';
+                if(isOnLeave) {
+                    overallStatus = 'On Leave';
+                } else if(!rec.time_in || rec.time_in_status === 'Absent') {
+                    overallStatus = 'Absent';
+                } else if(rec.time_out_status === 'Undertime') {
+                    overallStatus = 'Undertime';
+                } else if(rec.time_out_status === 'Overtime') {
+                    overallStatus = 'Overtime';
+                } else if(rec.time_in_status === 'Late') {
+                    overallStatus = 'Late';
+                }
+                html += `<tr><td>${rec.employee_id || ''}</td><td>${rec.name || ''}</td><td>${rec.department || ''}</td><td>${rec.date || ''}</td><td>${rec.time_in || ''}</td><td>${timeInStatus}</td><td>${rec.time_out || ''}</td><td>${timeOutStatus}</td><td>${overallStatus}</td></tr>`;
             });
             html += '</table></body></html>';
             downloadFile(html, 'attendance_' + getDateRangeLabel() + '.xls', 'application/vnd.ms-excel');

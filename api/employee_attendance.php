@@ -28,7 +28,7 @@ try {
     }
 
     // Fetch attendance for the employee
-    $stmt = $pdo->prepare('SELECT id, employee_id, date, time_in, time_out, time_in_status, time_out_status FROM attendance WHERE employee_id = ? ORDER BY date ASC');
+    $stmt = $pdo->prepare('SELECT id, employee_id, date, time_in, time_out, time_in_status, time_out_status, status FROM attendance WHERE employee_id = ? ORDER BY date ASC');
     $stmt->execute([$employeeId]);
     $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
@@ -45,10 +45,32 @@ try {
 
     $records = [];
     foreach ($rows as $r) {
-        $timeInFmt = $fmtTime($r['time_in']);
-        $timeOutFmt = $fmtTime($r['time_out']);
+        $timeInRaw = $r['time_in'];
+        $timeOutRaw = $r['time_out'];
+        $timeInFmt = $fmtTime($timeInRaw);
+        $timeOutFmt = $fmtTime($timeOutRaw);
         $timeInStatus = $r['time_in_status'] ?? null;
         $timeOutStatus = $r['time_out_status'] ?? null;
+        $dbStatus = trim(strtolower($r['status'] ?? '')); // Get database status field
+        
+        // PRIORITY: Check database status field FIRST for special statuses like on-leave
+        if ($dbStatus === 'on-leave' || $dbStatus === 'on leave' || $dbStatus === 'leave') {
+            $status = 'On Leave';
+        } 
+        // Otherwise determine status based on time-in/time-out
+        elseif ($timeInStatus === 'Absent' || (!$timeInRaw && $dbStatus !== 'on-leave')) {
+            $status = 'Absent';
+        } elseif ($timeOutStatus === 'Undertime') {
+            $status = 'Undertime';
+        } elseif ($timeOutStatus === 'Overtime') {
+            $status = 'Overtime';
+        } elseif ($timeOutStatus === 'On-time' || $timeOutStatus === 'Out') {
+            $status = 'Present';
+        } elseif ($timeInStatus === 'Late') {
+            $status = 'Late';
+        } else {
+            $status = $dbStatus ? ucwords($dbStatus) : 'Present';
+        }
 
         // Flags
         $tardy = ($timeInStatus === 'Late');
@@ -62,6 +84,7 @@ try {
             'timeOut' => $timeOutFmt,
             'timeInStatus' => $timeInStatus,
             'timeOutStatus' => $timeOutStatus,
+            'status' => $status,
             'tardy' => $tardy,
             'undertime' => $undertime,
             'overtime' => $overtime,

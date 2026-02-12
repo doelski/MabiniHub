@@ -71,7 +71,8 @@ try {
                     u.department, 
                     a.employee_id,
                     a.time_in_status,
-                    a.time_out_status
+                    a.time_out_status,
+                    a.status
                     FROM attendance a 
                     JOIN users u ON u.employee_id = a.employee_id 
                     WHERE ' . $dateCondition . ' AND a.time_in_status = "Absent"';
@@ -97,7 +98,8 @@ try {
                 u.department, 
                 a.employee_id,
                 a.time_in_status,
-                a.time_out_status
+                a.time_out_status,
+                a.status
                 FROM attendance a 
                 JOIN users u ON u.employee_id = a.employee_id 
                 WHERE ' . $dateCondition . ' AND a.time_in_status = ?';
@@ -124,7 +126,8 @@ try {
                 u.department, 
                 a.employee_id,
                 a.time_in_status,
-                a.time_out_status
+                a.time_out_status,
+                a.status
                 FROM attendance a 
                 JOIN users u ON u.employee_id = a.employee_id 
                 WHERE ' . $dateCondition . ' AND a.time_out_status = ?';
@@ -143,6 +146,32 @@ try {
         }
 
         $sql .= ' ORDER BY a.time_out DESC';
+    } else if ($status === 'on-leave' || $status === 'On Leave' || strtolower($status) === 'leave') {
+        // Filter by status field for on-leave
+        $params = $dateParams;
+        $sql = 'SELECT a.*, 
+                CONCAT(u.firstname, " ", u.lastname) as name, 
+                u.department, 
+                a.employee_id,
+                a.time_in_status,
+                a.time_out_status,
+                a.status
+                FROM attendance a 
+                JOIN users u ON u.employee_id = a.employee_id 
+                WHERE ' . $dateCondition . ' AND a.status = \'on-leave\'';
+
+        if ($dept) {
+            $sql .= ' AND u.department = ?';
+            $params[] = $dept;
+        }
+
+        if ($search) {
+            $sql .= ' AND (CONCAT(u.firstname, " ", u.lastname) LIKE ? OR u.employee_id LIKE ?)';
+            $params[] = "%$search%";
+            $params[] = "%$search%";
+        }
+
+        $sql .= ' ORDER BY a.date DESC';
     } else {
         // Normal query for other statuses
         // If status is empty or 'all' we want to show attendance records
@@ -150,7 +179,7 @@ try {
         $params = $dateParams;
 
         // Base attendance select (explicit columns to make UNION compatible)
-        $attendanceSelect = 'SELECT a.id, a.employee_id, a.date, a.time_in, a.time_out, a.time_in_status, a.time_out_status, CONCAT(u.firstname, " ", u.lastname) as name, u.department
+        $attendanceSelect = 'SELECT a.id, a.employee_id, a.date, a.time_in, a.time_out, a.time_in_status, a.time_out_status, a.status, CONCAT(u.firstname, " ", u.lastname) as name, u.department
                 FROM attendance a
                 JOIN users u ON u.employee_id = a.employee_id
                 WHERE ' . $dateCondition;
@@ -180,7 +209,7 @@ try {
             if ($date) {
                 // Build absent users select (employees without attendance for the date)
                 $absentParams = [$date, $date];
-                $absentSelect = 'SELECT NULL as id, u.employee_id, ? as date, NULL as time_in, NULL as time_out, "Absent" as time_in_status, NULL as time_out_status, CONCAT(u.firstname, " ", u.lastname) as name, u.department
+                $absentSelect = 'SELECT NULL as id, u.employee_id, ? as date, NULL as time_in, NULL as time_out, "Absent" as time_in_status, NULL as time_out_status, "Absent" as status, CONCAT(u.firstname, " ", u.lastname) as name, u.department
                     FROM users u
                     WHERE u.status = "approved"
                     AND u.employee_id IS NOT NULL

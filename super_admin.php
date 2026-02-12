@@ -468,12 +468,6 @@ require_role('super_admin');
             Super Admin Dashboard
           </div>
           <div class="flex items-center gap-4">
-            <a
-              href="fingerprint/components/Register_Fingerprint/register_page.php"
-              class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-semibold flex items-center gap-2 transition-colors"
-            >
-              <i class="fas fa-fingerprint"></i> Fingerprint Registration
-            </a>
             <span class="hidden md:block font-medium text-blue-900"
               >Super Admin</span
             >

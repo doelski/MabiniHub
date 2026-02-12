@@ -1,73 +1,7 @@
 <?php
 session_start();
 require_once 'db.php';
-// Clear any QR-invalid flag when visiting the login page without a qr param
-if (!isset($_GET['qr'])) {
-    unset($_SESSION['qr_pending_invalid']);
-}
 
-// If arrived via QR link, validate immediately and store pending token in session so we can process after login
-// NEW DATABASE-BASED APPROACH: Token validated against database with 60-second expiration
-if (isset($_GET['qr']) && $_GET['qr']) {
-    require_once __DIR__ . '/attendance/qr_utils.php';
-    $pending = $_GET['qr'];
-    
-    // Verify token against database (checks expiration automatically)
-    if (qr_verify_token($pdo, $pending)) {
-        // Token is valid and not expired - store for processing after login
-        $_SESSION['qr_pending'] = $pending;
-        unset($_SESSION['qr_pending_invalid']);
-        
-        // If the user is already logged in, process attendance immediately
-        if (isset($_SESSION['user_id']) && $_SESSION['user_id'] !== '' && $_SESSION['user_id'] !== 'superadmin') {
-            $res = qr_record_attendance_for_user($pdo, $_SESSION['user_id']);
-            
-            // Multi-use tokens: no need to mark as used
-            
-            // Clear pending token
-            unset($_SESSION['qr_pending']);
-
-            // Determine redirect target based on current session role/position (mirror normal login routing)
-            if (isset($_SESSION['user_id']) && $_SESSION['user_id'] === 'superadmin') {
-                $redirect = 'super_admin.php';
-            } else {
-                $sessRole = strtolower($_SESSION['role'] ?? $_SESSION['position'] ?? '');
-                if ($sessRole === 'hr' || $sessRole === 'human resources') {
-                    $redirect = 'hr/dashboard.php';
-                } elseif ($sessRole === 'department_head' || $sessRole === 'dept head' || $sessRole === 'dept_head') {
-                    $redirect = 'dept_head/dashboard.php';
-                } elseif ($sessRole === 'employee') {
-                    $redirect = 'employee/dashboard.php';
-                } else {
-                    $redirect = 'dashboard.php';
-                }
-            }
-
-            if ($res['success']) {
-                $msg = ($res['action'] === 'time_in') ? 'timein_ok' : 'timeout_ok';
-                $timeParam = isset($res['time']) ? '&att_time=' . urlencode($res['time']) : '';
-                $statusParam = isset($res['status']) ? '&att_status=' . urlencode($res['status']) : '';
-                header('Location: ' . $redirect . '?att=' . $msg . $timeParam . $statusParam);
-                exit();
-            } else {
-                $lowerMsg = strtolower($res['message'] ?? '');
-                if (strpos($lowerMsg, 'time out already') !== false || strpos($lowerMsg, 'time out already recorded') !== false) {
-                    $timeParam = isset($res['time']) ? '&att_time=' . urlencode($res['time']) : '';
-                    $statusParam = isset($res['status']) ? '&att_status=' . urlencode($res['status']) : '';
-                    header('Location: ' . $redirect . '?att=already_timedout' . $timeParam . $statusParam);
-                    exit();
-                }
-                header('Location: ' . $redirect . '?att=failed');
-                exit();
-            }
-        }
-    } else {
-        // Token invalid / expired. Show clear feedback on the login page and prevent login while this expired QR is present
-        $_SESSION['qr_pending_invalid'] = true;
-        unset($_SESSION['qr_pending']);
-        $error = 'The QR code you used is expired or invalid. Please scan the current QR on the scanner and try again.';
-    }
-}
 // Redirect to dashboard if already logged in
 if (isset($_SESSION['user_id'])) {
     // Super admin
@@ -93,10 +27,6 @@ if (isset($_SESSION['user_id'])) {
 }
 if (!isset($error)) $error = '';
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    // If the user arrived via an expired/invalid QR, block login attempts while that flag is present
-    if (!empty($_SESSION['qr_pending_invalid'])) {
-        $error = 'The QR code you used is expired or invalid. You cannot log in using that link. Please scan the current QR on the scanner and try again.';
-    } else {
         $email = $_POST['email'] ?? '';
         $password = $_POST['password'] ?? '';
     
@@ -139,57 +69,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 header('Location: municipal/approved_leaves.php');
                 exit();
             }
-            // If login was initiated via QR, attempt to process attendance after login
-            // NEW DATABASE-BASED APPROACH: Validates token against database with 60-second expiration
-            if (!empty($_SESSION['qr_pending'])) {
-                // include QR utilities
-                require_once __DIR__ . '/attendance/qr_utils.php';
-                $pending = $_SESSION['qr_pending'];
-                
-                // Verify token against database (checks if not expired and not used)
-                if (qr_verify_token($pdo, $pending)) {
-                    // Record attendance for this user
-                    $result = qr_record_attendance_for_user($pdo, $user['id']);
-                    
-                    // Multi-use tokens: no need to mark as used
-                    
-                    // Clear pending token
-                    unset($_SESSION['qr_pending']);
-                    // Determine redirect target based on roleNorm (mirror normal login routing)
-                    if ($roleNorm === 'hr' || $roleNorm === 'human resources') {
-                        $redirect = 'hr/dashboard.php';
-                    } elseif ($roleNorm === 'department_head' || $roleNorm === 'dept head' || $roleNorm === 'dept_head') {
-                        $redirect = 'dept_head/dashboard.php';
-                    } elseif ($roleNorm === 'employee') {
-                        $redirect = 'employee/dashboard.php';
-                    } elseif ($_SESSION['user_id'] === 'superadmin') {
-                        $redirect = 'super_admin.php';
-                    } else {
-                        $redirect = 'dashboard.php';
-                    }
-
-                    if ($result['success']) {
-                        $msg = ($result['action'] === 'time_in') ? 'timein_ok' : 'timeout_ok';
-                        $timeParam = isset($result['time']) ? '&att_time=' . urlencode($result['time']) : '';
-                        $statusParam = isset($result['status']) ? '&att_status=' . urlencode($result['status']) : '';
-                        header('Location: ' . $redirect . '?att=' . $msg . $timeParam . $statusParam);
-                        exit();
-                    } else {
-                        // Map specific known messages to more descriptive flags
-                        $lowerMsg = strtolower($result['message'] ?? '');
-                        if (strpos($lowerMsg, 'time out already') !== false || strpos($lowerMsg, 'time out already recorded') !== false) {
-                            $timeParam = isset($result['time']) ? '&att_time=' . urlencode($result['time']) : '';
-                            $statusParam = isset($result['status']) ? '&att_status=' . urlencode($result['status']) : '';
-                            header('Location: ' . $redirect . '?att=already_timedout' . $timeParam . $statusParam);
-                            exit();
-                        }
-                        header('Location: ' . $redirect . '?att=failed');
-                        exit();
-                    }
-                }
-                // If token invalid, just clear it and continue normal redirect
-                unset($_SESSION['qr_pending']);
-            }
 
             if ($roleNorm === 'hr' || $roleNorm === 'human resources') {
                 header('Location: hr/dashboard.php');
@@ -205,7 +84,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     } else {
         $error = 'Invalid email or password.';
     }
-}
 }
 ?>
 <!DOCTYPE html>

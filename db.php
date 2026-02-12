@@ -55,42 +55,6 @@ if (!function_exists('getNextEmployeeId')) {
     }
 }
 
-// QR token secret - stored in database for hosting compatibility (no .env files needed)
-// This approach works on any hosting provider without file permission issues
-if (!defined('QR_SECRET')) {
-    try {
-        // Try to get QR_SECRET from database
-        $stmt = $pdo->query("SELECT config_value FROM system_config WHERE config_key = 'QR_SECRET' LIMIT 1");
-        $row = $stmt->fetch();
-        
-        if ($row && !empty($row['config_value'])) {
-            define('QR_SECRET', $row['config_value']);
-        } else {
-            // Generate new secret and store in database
-            try {
-                $generated = bin2hex(random_bytes(32));
-            } catch (Exception $e) {
-                $generated = bin2hex(openssl_random_pseudo_bytes(32));
-            }
-            
-            // Store in database for future use
-            $pdo->exec("INSERT INTO system_config (config_key, config_value) VALUES ('QR_SECRET', '{$generated}') 
-                       ON DUPLICATE KEY UPDATE config_value = '{$generated}'");
-            
-            define('QR_SECRET', $generated);
-        }
-    } catch (PDOException $e) {
-        // Fallback if system_config table doesn't exist yet
-        // Generate temporary secret (will be stored once table is created)
-        try {
-            $generated = bin2hex(random_bytes(32));
-        } catch (Exception $ex) {
-            $generated = bin2hex(openssl_random_pseudo_bytes(32));
-        }
-        define('QR_SECRET', $generated);
-    }
-}
-
 // Base path for the application. Automatically detects the correct path for both local and hosted environments.
 if (!defined('BASE_PATH')) {
     // Detect the base path dynamically from the current script location
