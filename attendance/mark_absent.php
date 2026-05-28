@@ -8,18 +8,30 @@
 require_once __DIR__ . '/../db.php';
 date_default_timezone_set('Asia/Manila');
 
+$isDirectRun = realpath($_SERVER['SCRIPT_FILENAME'] ?? '') === __FILE__;
+
+function mark_absent_response(array $response, bool $isDirectRun)
+{
+    if ($isDirectRun) {
+        header('Content-Type: application/json');
+        echo json_encode($response);
+        exit;
+    }
+
+    return $response;
+}
+
 $today = date('Y-m-d');
 $nowTime = strtotime(date('H:i:s'));
 $cutoff = strtotime('17:00:00'); // 5:00 PM
 
 if ($nowTime < $cutoff) {
-    echo json_encode([
+    return mark_absent_response([
         'success' => false,
         'date' => $today,
         'marked_absent' => 0,
         'message' => 'It is not yet 5:00 PM Manila time. No action taken.'
-    ]);
-    exit;
+    ], $isDirectRun);
 }
 
 // Get all approved employees
@@ -53,14 +65,16 @@ foreach ($allEmployees as $empId) {
         }
 }
 
-echo json_encode([
+$response = [
     'success' => true,
     'date' => $today,
     'total_employees' => count($allEmployees),
     'marked_absent' => $absentCount,
     'message' => "Marked {$absentCount} employees as absent for {$today}"
-]);
+];
+
 // record last run date so web pages can avoid re-running multiple times per day
 $lastRunFile = __DIR__ . '/last_absent_run.txt';
 @file_put_contents($lastRunFile, $today);
-?>
+
+return mark_absent_response($response, $isDirectRun);

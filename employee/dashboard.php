@@ -53,6 +53,9 @@ $user_id = $_SESSION['user_id'];
 $stmt = $pdo->prepare('SELECT firstname, lastname, mi, position, profile_picture, email FROM users WHERE id = ?');
 $stmt->execute([$user_id]);
 $user = $stmt->fetch(PDO::FETCH_ASSOC);
+if (!headers_sent()) {
+    header('Content-Type: text/html; charset=UTF-8');
+}
 if ($user) {
     $fullName = format_dept_head_name($user['firstname'], $user['mi'] ?? '', $user['lastname']);
     $position = $user['position'];
