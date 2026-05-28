@@ -1,7 +1,9 @@
 <?php
 require_once __DIR__ . '/_bootstrap.php';
 // api/super_admin_events.php
-require_once '../db.php';
+require_once __DIR__ . '/../auth_guard.php';
+require_api_auth('super_admin');
+require_once __DIR__ . '/../db.php';
 header('Content-Type: application/json');
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
