@@ -2,13 +2,9 @@ services:
   - type: web
     name: mabinihub
     runtime: docker
-    plan: starter
+    plan: free
     autoDeploy: true
     healthCheckPath: /api/health.php
-    disk:
-      name: mabinihub-uploads
-      mountPath: /var/www/html/uploads
-      sizeGB: 1
     envVars:
       - key: APP_ENV
         value: production
