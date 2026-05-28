@@ -12,7 +12,8 @@ if (!$email) {
     exit;
 }
 
-// Ensure tasks table and new columns exist
+// Ensure tasks table and new columns exist. This is a compatibility safety net;
+// deployed Supabase projects should already have the schema from supabase_database.sql.
 try {
     $pdo->exec("CREATE TABLE IF NOT EXISTS tasks (
         id INT AUTO_INCREMENT PRIMARY KEY,
@@ -26,7 +27,11 @@ try {
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP NULL DEFAULT NULL ON UPDATE CURRENT_TIMESTAMP
     )");
-    // Add submission columns if missing
+} catch (PDOException $e) {
+    // Non-fatal: the table normally already exists in Supabase.
+}
+
+try {
     $checkCols = $pdo->prepare("SELECT column_name FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'tasks'");
     $checkCols->execute();
     $cols = array_map(fn($r) => $r['column_name'], $checkCols->fetchAll(PDO::FETCH_ASSOC));
@@ -40,9 +45,8 @@ try {
         $pdo->exec("ALTER TABLE tasks ADD COLUMN completed_at DATETIME DEFAULT NULL");
     }
 } catch (PDOException $e) {
-    http_response_code(500);
-    echo json_encode(['success' => false, 'error' => 'Failed to prepare tasks table']);
-    exit;
+    // Non-fatal for the current Supabase schema; later queries will report a
+    // concrete error if a required column is genuinely missing.
 }
 
 $taskId = isset($_POST['id']) ? (int)$_POST['id'] : 0;
