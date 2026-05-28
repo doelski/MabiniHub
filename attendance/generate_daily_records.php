@@ -119,8 +119,7 @@ try {
     // Status is now determined dynamically based on am_in/pm_in presence
     // No need to mark records as absent - it's calculated on the fly
     $markedAbsent = 0;
-        $markedAbsent = $markAbsent->rowCount();
-    }
+    $isAfter5PM = ((int)date('H')) >= 17;
     
     $result = [
         'success' => true,

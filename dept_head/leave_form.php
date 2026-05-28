@@ -23,7 +23,7 @@ if ($user_email) {
         $user_position = $u['position'] ?? '';
     } else {
         // fallback to employees table if exists
-        $stmt = $pdo->prepare('SELECT firstName, lastName, middleName, department, position, salary FROM employees WHERE email = ?');
+        $stmt = $pdo->prepare('SELECT firstname AS "firstName", lastname AS "lastName", middlename AS "middleName", department, position, salary FROM employees WHERE email = ?');
         $stmt->execute([$user_email]);
         $u2 = $stmt->fetch(PDO::FETCH_ASSOC);
         if ($u2) {

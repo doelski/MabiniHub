@@ -1,0 +1,6 @@
+.env
+.env.*
+*.log
+attendance/daily_generator_log.txt
+attendance/last_absent_run.txt
+attendance/last_forgotten_run.txt

@@ -31,7 +31,7 @@ if ($user_id) {
 $email = $_GET['email'] ?? '';
 if ($email) {
 	try {
-		$stmt = $pdo->prepare('SELECT department, lastName, firstName, middleName, position, salary FROM employees WHERE email=?');
+		$stmt = $pdo->prepare('SELECT department, lastname AS "lastName", firstname AS "firstName", middlename AS "middleName", position, salary FROM employees WHERE email=?');
 		$stmt->execute([$email]);
 		$res = $stmt->fetch(PDO::FETCH_ASSOC);
 		echo json_encode($res ?: []);

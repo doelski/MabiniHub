@@ -1,0 +1,30 @@
+services:
+  - type: web
+    name: mabinihub
+    runtime: docker
+    plan: starter
+    autoDeploy: true
+    healthCheckPath: /api/health.php
+    disk:
+      name: mabinihub-uploads
+      mountPath: /var/www/html/uploads
+      sizeGB: 1
+    envVars:
+      - key: APP_ENV
+        value: production
+      - key: APP_DEBUG
+        value: "0"
+      - key: TIMEZONE
+        value: Asia/Manila
+      - key: DB_HOST
+        value: aws-1-ap-northeast-2.pooler.supabase.com
+      - key: DB_PORT
+        value: "6543"
+      - key: DB_NAME
+        value: postgres
+      - key: DB_USER
+        value: postgres.ihwmidppciotifaltaij
+      - key: DB_PASS
+        sync: false
+      - key: DB_SSLMODE
+        value: require
