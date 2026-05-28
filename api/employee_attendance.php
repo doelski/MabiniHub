@@ -28,7 +28,7 @@ try {
     }
 
     // Fetch attendance for the employee
-    $stmt = $pdo->prepare('SELECT id, employee_id, date, time_in, time_out, time_in_status, time_out_status, status FROM attendance WHERE employee_id = ? ORDER BY date ASC');
+    $stmt = $pdo->prepare('SELECT id, employee_id, date, am_in, am_out, pm_in, pm_out, status FROM attendance WHERE employee_id = ? ORDER BY date ASC');
     $stmt->execute([$employeeId]);
     $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
@@ -45,65 +45,51 @@ try {
 
     $records = [];
     foreach ($rows as $r) {
-        $timeInRaw = $r['time_in'];
-        $timeOutRaw = $r['time_out'];
-        $timeInFmt = $fmtTime($timeInRaw);
-        $timeOutFmt = $fmtTime($timeOutRaw);
-        $timeInStatus = $r['time_in_status'] ?? null;
-        $timeOutStatus = $r['time_out_status'] ?? null;
+        $amInRaw = $r['am_in'];
+        $amOutRaw = $r['am_out'];
+        $pmInRaw = $r['pm_in'];
+        $pmOutRaw = $r['pm_out'];
+        
+        $amInFmt = $fmtTime($amInRaw);
+        $amOutFmt = $fmtTime($amOutRaw);
+        $pmInFmt = $fmtTime($pmInRaw);
+        $pmOutFmt = $fmtTime($pmOutRaw);
+        
         $dbStatus = trim(strtolower($r['status'] ?? '')); // Get database status field
         
         // PRIORITY: Check database status field FIRST for special statuses like on-leave
         if ($dbStatus === 'on-leave' || $dbStatus === 'on leave' || $dbStatus === 'leave') {
             $status = 'On Leave';
         } 
-        // Otherwise determine status based on time-in/time-out
-        elseif ($timeInStatus === 'Absent' || (!$timeInRaw && $dbStatus !== 'on-leave')) {
+        // Otherwise determine status based on presence of attendance times
+        elseif (!$amInRaw && !$pmInRaw) {
             $status = 'Absent';
-        } elseif ($timeOutStatus === 'Undertime') {
-            $status = 'Undertime';
-        } elseif ($timeOutStatus === 'Overtime') {
-            $status = 'Overtime';
-        } elseif ($timeOutStatus === 'On-time' || $timeOutStatus === 'Out') {
-            $status = 'Present';
-        } elseif ($timeInStatus === 'Late') {
-            $status = 'Late';
         } else {
-            $status = $dbStatus ? ucwords($dbStatus) : 'Present';
+            $status = 'Present';
         }
-
-        // Flags
-        $tardy = ($timeInStatus === 'Late');
-        $undertime = ($timeOutStatus === 'Undertime');
-        $overtime = ($timeOutStatus === 'Overtime');
 
         $records[] = [
             'id' => (int)$r['id'],
             'date' => $r['date'],
-            'timeIn' => $timeInFmt,
-            'timeOut' => $timeOutFmt,
-            'timeInStatus' => $timeInStatus,
-            'timeOutStatus' => $timeOutStatus,
+            'amIn' => $amInFmt,
+            'amOut' => $amOutFmt,
+            'pmIn' => $pmInFmt,
+            'pmOut' => $pmOutFmt,
             'status' => $status,
-            'tardy' => $tardy,
-            'undertime' => $undertime,
-            'overtime' => $overtime,
         ];
     }
 
     // Summary
-    $daysPresent = 0; $daysLate = 0; $daysAbsent = 0; $totalTardy = 0; $totalUndertime = 0; $totalOvertime = 0;
+    $daysPresent = 0; $daysAbsent = 0;
     foreach ($records as $rec) {
-        if ($rec['timeInStatus'] === 'Present') $daysPresent++;
-        elseif ($rec['timeInStatus'] === 'Late') $daysLate++;
-        if ($rec['timeInStatus'] === 'Absent' || !$rec['timeIn']) $daysAbsent++;
-        if ($rec['tardy']) $totalTardy++;
-        if ($rec['undertime']) $totalUndertime++;
-        if ($rec['overtime']) $totalOvertime++;
+        if ($rec['status'] === 'Present' || $rec['status'] === 'On Leave') {
+            $daysPresent++;
+        } elseif ($rec['status'] === 'Absent') {
+            $daysAbsent++;
+        }
     }
     $total = count($records);
-    $daysActive = $daysPresent + $daysLate;
-    $attendanceRate = $total ? round(($daysActive / $total) * 100) : 0;
+    $attendanceRate = $total ? round(($daysPresent / $total) * 100) : 0;
 
     echo json_encode([
         'success' => true,
@@ -116,12 +102,7 @@ try {
         'attendance' => $records,
         'summary' => [
             'daysPresent' => $daysPresent,
-            'daysLate' => $daysLate,
-            'daysActive' => $daysActive,
             'daysAbsent' => $daysAbsent,
-            'totalTardy' => $totalTardy,
-            'totalUndertime' => $totalUndertime,
-            'totalOvertime' => $totalOvertime,
             'attendanceRate' => $attendanceRate
         ],
         'server_time' => (new DateTime())->format('Y-m-d H:i:s')

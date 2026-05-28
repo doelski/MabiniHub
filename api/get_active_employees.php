@@ -9,13 +9,13 @@ $today = date('Y-m-d');
 $department = $_GET['department'] ?? '';
 
 try {
-    // Get employees who have time_in today (they are active/present)
+    // Get employees who have am_in OR pm_in today (they are active/present)
     $sql = 'SELECT 
                 u.position,
                 COUNT(DISTINCT a.employee_id) as active_count
             FROM attendance a
             JOIN users u ON u.employee_id = a.employee_id
-            WHERE a.date = ? AND a.time_in IS NOT NULL';
+            WHERE a.date = ? AND (a.am_in IS NOT NULL OR a.pm_in IS NOT NULL)';
     
     $params = [$today];
     

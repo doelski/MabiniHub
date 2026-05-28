@@ -85,7 +85,7 @@ try {
         try {
             // Check if record already exists for today
             $check = $pdo->prepare('
-                SELECT id, time_in, time_in_status 
+                SELECT id 
                 FROM attendance 
                 WHERE employee_id = ? AND date = ?
             ');
@@ -93,29 +93,14 @@ try {
             $existing = $check->fetch(PDO::FETCH_ASSOC);
             
             if ($existing) {
-                // Record exists, check if needs update (mark absent if no time-in)
-                $currentHour = (int)date('H');
-                $currentMinute = (int)date('i');
-                $isAfter5PM = ($currentHour > 17) || ($currentHour === 17 && $currentMinute >= 0);
-                
-                if ($isAfter5PM && empty($existing['time_in']) && $existing['time_in_status'] !== 'Absent') {
-                    // Mark as absent if past 5 PM and no time-in
-                    $update = $pdo->prepare('
-                        UPDATE attendance 
-                        SET time_in_status = "Absent", 
-                            status = "Absent",
-                            updated_at = NOW()
-                        WHERE id = ?
-                    ');
-                    $update->execute([$existing['id']]);
-                }
+                // Record exists, no update needed
                 $recordsExist++;
             } else {
                 // No record exists, create placeholder for today
-                // Will be marked as absent at end of day if no time-in
+                // Status will be determined based on whether they clock in
                 $insert = $pdo->prepare('
                     INSERT INTO attendance 
-                    (employee_id, date, time_in, time_out, time_in_status, time_out_status, status, created_at) 
+                    (employee_id, date, am_in, am_out, pm_in, pm_out, status, created_at) 
                     VALUES 
                     (?, ?, NULL, NULL, NULL, NULL, NULL, NOW())
                 ');
@@ -131,23 +116,9 @@ try {
         }
     }
     
-    // Now mark all without time-in as Absent if after 5 PM
-    $currentHour = (int)date('H');
-    $currentMinute = (int)date('i');
-    $isAfter5PM = ($currentHour > 17) || ($currentHour === 17 && $currentMinute >= 0);
-    
+    // Status is now determined dynamically based on am_in/pm_in presence
+    // No need to mark records as absent - it's calculated on the fly
     $markedAbsent = 0;
-    if ($isAfter5PM) {
-        $markAbsent = $pdo->prepare('
-            UPDATE attendance 
-            SET time_in_status = "Absent",
-                status = "Absent",
-                updated_at = NOW()
-            WHERE date = ? 
-            AND (time_in IS NULL OR time_in = "")
-            AND (time_in_status IS NULL OR time_in_status != "Absent")
-        ');
-        $markAbsent->execute([$today]);
         $markedAbsent = $markAbsent->rowCount();
     }
     

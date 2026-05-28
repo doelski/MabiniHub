@@ -23,7 +23,7 @@ $employeeFullName = trim($user['firstname'] . ' ' . $user['lastname']);
 // If employee_id is missing, there's no attendance records tied; leave as null
 $attendanceRows = [];
 if ($employeeId) {
-    $stmt = $pdo->prepare('SELECT id, employee_id, date, time_in, time_out, time_in_status, time_out_status, status, created_at FROM attendance WHERE employee_id = ? ORDER BY date ASC');
+    $stmt = $pdo->prepare('SELECT id, employee_id, date, am_in, am_out, pm_in, pm_out, status, created_at FROM attendance WHERE employee_id = ? ORDER BY date ASC');
     $stmt->execute([$employeeId]);
     $attendanceRows = $stmt->fetchAll();
 }
@@ -41,14 +41,17 @@ function fmtTime($dt) {
 
 $records = [];
 foreach ($attendanceRows as $r) {
-    $timeInRaw = $r['time_in'];
-    $timeOutRaw = $r['time_out'];
-    $timeInFmt = fmtTime($timeInRaw);
-    $timeOutFmt = fmtTime($timeOutRaw);
+    $amInRaw = $r['am_in'];
+    $amOutRaw = $r['am_out'];
+    $pmInRaw = $r['pm_in'];
+    $pmOutRaw = $r['pm_out'];
+    
+    $amInFmt = fmtTime($amInRaw);
+    $amOutFmt = fmtTime($amOutRaw);
+    $pmInFmt = fmtTime($pmInRaw);
+    $pmOutFmt = fmtTime($pmOutRaw);
 
     // Get status from database
-    $timeInStatus = $r['time_in_status'] ?? null;
-    $timeOutStatus = $r['time_out_status'] ?? null;
     $dbStatus = trim(strtolower($r['status'] ?? '')); // Get and normalize the overall status field
     
     // PRIORITY: Check database status field FIRST (for special statuses like on-leave)
@@ -56,62 +59,35 @@ foreach ($attendanceRows as $r) {
     if ($dbStatus === 'on-leave' || $dbStatus === 'on leave' || $dbStatus === 'leave') {
         $status = 'On Leave';
     } 
-    // Otherwise determine unified display status based on time-in/time-out
-    elseif ($timeInStatus === 'Absent' || (!$timeInRaw && $dbStatus !== 'on-leave')) {
+    // Otherwise determine unified display status based on presence of times
+    elseif (!$amInRaw && !$pmInRaw) {
         $status = 'Absent';
-    } elseif ($timeOutStatus === 'Undertime') {
-        $status = 'Undertime';
-    } elseif ($timeOutStatus === 'Overtime') {
-        $status = 'Overtime';
-    } elseif ($timeOutStatus === 'On-time' || $timeOutStatus === 'Out') {
-        $status = 'Present';
-    } elseif ($timeInStatus === 'Late') {
-        $status = 'Late';
     } else {
-        // Final fallback - check if database has a value
-        $status = $dbStatus ? ucwords($dbStatus) : 'Present';
+        $status = 'Present';
     }
-
-    // Set flags based on database status values
-    $tardy = ($timeInStatus === 'Late');
-    $undertime = ($timeOutStatus === 'Undertime');
-    $overtime = ($timeOutStatus === 'Overtime');
 
     $records[] = [
         'id' => (int)$r['id'],
         'date' => $r['date'],
-        'timeIn' => $timeInFmt,
-        'timeOut' => $timeOutFmt,
-        'timeInStatus' => $timeInStatus,
-        'timeOutStatus' => $timeOutStatus,
+        'amIn' => $amInFmt,
+        'amOut' => $amOutFmt,
+        'pmIn' => $pmInFmt,
+        'pmOut' => $pmOutFmt,
         'status' => $status,
-        'tardy' => $tardy,
-        'undertime' => $undertime,
-        'overtime' => $overtime,
     ];
 }
 
 // compute summary
-$daysPresent = 0; $daysLate = 0; $daysAbsent = 0; $totalTardy = 0; $totalUndertime = 0; $totalOvertime = 0;
+$daysPresent = 0; $daysAbsent = 0;
 foreach ($records as $rec) {
-    // Separate counting: Present = only "Present" status, Late = only "Late" status
-    if ($rec['timeInStatus'] === 'Present') {
+    if ($rec['status'] === 'Present' || $rec['status'] === 'On Leave') {
         $daysPresent++;
-    } elseif ($rec['timeInStatus'] === 'Late') {
-        $daysLate++;
-    }
-    // Absent = didn't time in (or timed in after 12:01 PM which is marked as Absent)
-    if ($rec['timeInStatus'] === 'Absent' || !$rec['timeIn']) {
+    } elseif ($rec['status'] === 'Absent') {
         $daysAbsent++;
     }
-    
-    if ($rec['tardy']) $totalTardy++;
-    if ($rec['undertime']) $totalUndertime++;
-    if ($rec['overtime']) $totalOvertime++;
 }
 $total = count($records);
-$daysActive = $daysPresent + $daysLate; // Active = Present + Late (timed in before 12:01 PM)
-$attendanceRate = $total ? round(($daysActive / $total) * 100) : 0;
+$attendanceRate = $total ? round(($daysPresent / $total) * 100) : 0;
 
 // prepare payload for client
 $payload = [
@@ -124,12 +100,7 @@ $payload = [
     'attendance' => $records,
     'summary' => [
         'daysPresent' => $daysPresent,
-        'daysLate' => $daysLate,
-        'daysActive' => $daysActive,
         'daysAbsent' => $daysAbsent,
-        'totalTardy' => $totalTardy,
-        'totalUndertime' => $totalUndertime,
-        'totalOvertime' => $totalOvertime,
         'attendanceRate' => $attendanceRate
     ]
     ];
@@ -322,10 +293,10 @@ if (isset($_SESSION['user_id']) && $_SESSION['user_id'] === 'superadmin') {
                 <thead class="bg-gray-50">
                     <tr>
                         <th scope="col" class="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Date</th>
-                        <th scope="col" class="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Time In</th>
-                        <th scope="col" class="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Time In Status</th>
-                        <th scope="col" class="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Time Out</th>
-                        <th scope="col" class="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Time Out Status</th>
+                        <th scope="col" class="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">AM In</th>
+                        <th scope="col" class="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">AM Out</th>
+                        <th scope="col" class="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">PM In</th>
+                        <th scope="col" class="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">PM Out</th>
                         <th scope="col" class="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Status</th>
                         <th scope="col" class="px-6 py-3"></th>
                     </tr>
@@ -547,42 +518,6 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
         filteredRecords.slice().reverse().forEach(rec => {
-            // Time In Status Badge
-            let timeInStatusBadge = '';
-            if (rec.timeIn) {
-                const timeInStatus = rec.timeInStatus || (rec.tardy ? 'Late' : 'Present');
-                if (timeInStatus === 'Late') {
-                    timeInStatusBadge = '<span class="inline-flex items-center text-xs font-medium rounded-full bg-yellow-100 text-yellow-800 px-2 py-0.5"><i class="fas fa-clock mr-1"></i>Late</span>';
-                } else if (timeInStatus === 'Present') {
-                    timeInStatusBadge = '<span class="inline-flex items-center text-xs font-medium rounded-full bg-green-100 text-green-800 px-2 py-0.5"><i class="fas fa-check mr-1"></i>Present</span>';
-                } else if (timeInStatus === 'Undertime') {
-                    timeInStatusBadge = '<span class="inline-flex items-center text-xs font-medium rounded-full bg-amber-100 text-amber-800 px-2 py-0.5"><i class="fas fa-hourglass-half mr-1"></i>Undertime</span>';
-                } else if (timeInStatus === 'Absent') {
-                    timeInStatusBadge = '<span class="inline-flex items-center text-xs font-medium rounded-full bg-red-100 text-red-800 px-2 py-0.5"><i class="fas fa-times mr-1"></i>Absent</span>';
-                } else {
-                    timeInStatusBadge = '<span class="text-gray-400">—</span>';
-                }
-            } else {
-                timeInStatusBadge = '<span class="text-gray-400">—</span>';
-            }
-
-            // Time Out Status Badge
-            let timeOutStatusBadge = '';
-            if (rec.timeOut) {
-                const timeOutStatus = rec.timeOutStatus || (rec.undertime ? 'Undertime' : (rec.overtime ? 'Overtime' : 'Out'));
-                if (timeOutStatus === 'Undertime') {
-                    timeOutStatusBadge = '<span class="inline-flex items-center text-xs font-medium rounded-full bg-orange-100 text-orange-800 px-2 py-0.5"><i class="fas fa-user-clock mr-1"></i>Undertime</span>';
-                } else if (timeOutStatus === 'Overtime') {
-                    timeOutStatusBadge = '<span class="inline-flex items-center text-xs font-medium rounded-full bg-blue-100 text-blue-800 px-2 py-0.5"><i class="fas fa-business-time mr-1"></i>Overtime</span>';
-                } else if (timeOutStatus === 'On-time' || timeOutStatus === 'Out') {
-                    timeOutStatusBadge = '<span class="inline-flex items-center text-xs font-medium rounded-full bg-green-100 text-green-800 px-2 py-0.5"><i class="fas fa-check mr-1"></i>Out</span>';
-                } else {
-                    timeOutStatusBadge = '<span class="text-gray-400">—</span>';
-                }
-            } else {
-                timeOutStatusBadge = '<span class="text-gray-400">—</span>';
-            }
-
             // Overall Status Badge
             let statusBadge = '';
             const status = rec.status || 'Present';
@@ -590,12 +525,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 statusBadge = '<span class="inline-flex items-center text-xs font-medium rounded-full bg-purple-100 text-purple-800 px-2 py-0.5"><i class="fas fa-umbrella-beach mr-1"></i>On Leave</span>';
             } else if (status === 'Absent') {
                 statusBadge = '<span class="inline-flex items-center text-xs font-medium rounded-full bg-red-100 text-red-800 px-2 py-0.5"><i class="fas fa-times mr-1"></i>Absent</span>';
-            } else if (status === 'Late') {
-                statusBadge = '<span class="inline-flex items-center text-xs font-medium rounded-full bg-yellow-100 text-yellow-800 px-2 py-0.5"><i class="fas fa-clock mr-1"></i>Late</span>';
-            } else if (status === 'Undertime') {
-                statusBadge = '<span class="inline-flex items-center text-xs font-medium rounded-full bg-orange-100 text-orange-800 px-2 py-0.5"><i class="fas fa-user-clock mr-1"></i>Undertime</span>';
-            } else if (status === 'Overtime') {
-                statusBadge = '<span class="inline-flex items-center text-xs font-medium rounded-full bg-blue-100 text-blue-800 px-2 py-0.5"><i class="fas fa-business-time mr-1"></i>Overtime</span>';
             } else if (status === 'Present') {
                 statusBadge = '<span class="inline-flex items-center text-xs font-medium rounded-full bg-green-100 text-green-800 px-2 py-0.5"><i class="fas fa-check mr-1"></i>Present</span>';
             } else {
@@ -606,10 +535,10 @@ document.addEventListener('DOMContentLoaded', () => {
             row.className = 'hover:bg-gray-50 transition';
             row.innerHTML = `
                 <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">${rec.date}</td>
-                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-600">${rec.timeIn || '<span class="text-gray-400">—</span>'}</td>
-                <td class="px-6 py-4 whitespace-nowrap text-sm">${timeInStatusBadge}</td>
-                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-600">${rec.timeOut || '<span class="text-gray-400">—</span>'}</td>
-                <td class="px-6 py-4 whitespace-nowrap text-sm">${timeOutStatusBadge}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-600">${rec.amIn || '<span class="text-gray-400">—</span>'}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-600">${rec.amOut || '<span class="text-gray-400">—</span>'}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-600">${rec.pmIn || '<span class="text-gray-400">—</span>'}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-600">${rec.pmOut || '<span class="text-gray-400">—</span>'}</td>
                 <td class="px-6 py-4 whitespace-nowrap text-sm">${statusBadge}</td>
                 <td class="px-6 py-4 whitespace-nowrap text-right text-sm">
                     <button data-id="${rec.id}" class="view-details-btn text-blue-600 hover:text-blue-800 font-medium">Details</button>
@@ -632,14 +561,14 @@ document.addEventListener('DOMContentLoaded', () => {
         const sortedRecords = [...attendanceRecords].sort((a, b) => new Date(a.date) - new Date(b.date));
         const last30 = sortedRecords.slice(-30);
         
-        let cumulativeActive = 0; // Active = Present + Late
+        let cumulativePresent = 0;
         last30.forEach((rec, idx) => {
-            // Count as active if time_in_status is Present or Late
-            if (rec.timeInStatus === 'Present' || rec.timeInStatus === 'Late') {
-                cumulativeActive++;
+            // Count as present if status is Present or On Leave
+            if (rec.status === 'Present' || rec.status === 'On Leave') {
+                cumulativePresent++;
             }
             trendLabels.push(new Date(rec.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }));
-            trendData.push(Math.round((cumulativeActive / (idx + 1)) * 100));
+            trendData.push(Math.round((cumulativePresent / (idx + 1)) * 100));
         });
 
         if (trendChart) trendChart.destroy();
@@ -778,12 +707,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 statusBadge = '<span class="inline-flex items-center text-xs font-medium rounded-full bg-purple-100 text-purple-800 px-2 py-0.5"><i class="fas fa-umbrella-beach mr-1"></i>On Leave</span>';
             } else if (status === 'Absent') {
                 statusBadge = '<span class="inline-flex items-center text-xs font-medium rounded-full bg-red-100 text-red-800 px-2 py-0.5"><i class="fas fa-times mr-1"></i>Absent</span>';
-            } else if (status === 'Late') {
-                statusBadge = '<span class="inline-flex items-center text-xs font-medium rounded-full bg-yellow-100 text-yellow-800 px-2 py-0.5"><i class="fas fa-clock mr-1"></i>Late</span>';
-            } else if (status === 'Undertime') {
-                statusBadge = '<span class="inline-flex items-center text-xs font-medium rounded-full bg-orange-100 text-orange-800 px-2 py-0.5"><i class="fas fa-user-clock mr-1"></i>Undertime</span>';
-            } else if (status === 'Overtime') {
-                statusBadge = '<span class="inline-flex items-center text-xs font-medium rounded-full bg-blue-100 text-blue-800 px-2 py-0.5"><i class="fas fa-business-time mr-1"></i>Overtime</span>';
             } else if (status === 'Present') {
                 statusBadge = '<span class="inline-flex items-center text-xs font-medium rounded-full bg-green-100 text-green-800 px-2 py-0.5"><i class="fas fa-check mr-1"></i>Present</span>';
             } else {
@@ -797,34 +720,26 @@ document.addEventListener('DOMContentLoaded', () => {
                         <p class="text-sm font-medium text-gray-900">${rec.date}</p>
                     </div>
                     <div>
-                        <p class="text-xs text-gray-500">Overall Status</p>
+                        <p class="text-xs text-gray-500">Status</p>
                         <p class="text-sm font-medium text-gray-900">${statusBadge}</p>
                     </div>
                     <div>
-                        <p class="text-xs text-gray-500">Time In</p>
-                        <p class="text-sm font-medium text-gray-900">${rec.timeIn || '—'}</p>
+                        <p class="text-xs text-gray-500">AM In</p>
+                        <p class="text-sm font-medium text-gray-900">${rec.amIn || '—'}</p>
                     </div>
                     <div>
-                        <p class="text-xs text-gray-500">Time Out</p>
-                        <p class="text-sm font-medium text-gray-900">${rec.timeOut || '—'}</p>
+                        <p class="text-xs text-gray-500">AM Out</p>
+                        <p class="text-sm font-medium text-gray-900">${rec.amOut || '—'}</p>
                     </div>
                     <div>
-                        <p class="text-xs text-gray-500">Time In Status</p>
-                        <p class="text-sm font-medium text-gray-900">${timeInStatusBadge}</p>
+                        <p class="text-xs text-gray-500">PM In</p>
+                        <p class="text-sm font-medium text-gray-900">${rec.pmIn || '—'}</p>
                     </div>
                     <div>
-                        <p class="text-xs text-gray-500">Time Out Status</p>
-                        <p class="text-sm font-medium text-gray-900">${timeOutStatusBadge}</p>
+                        <p class="text-xs text-gray-500">PM Out</p>
+                        <p class="text-sm font-medium text-gray-900">${rec.pmOut || '—'}</p>
                     </div>
                 </div>
-                ${rec.tardy || rec.undertime || rec.overtime ? `<div class="mt-3 pt-3 border-t border-gray-200">
-                    <p class="text-xs text-gray-500 mb-2">Flags</p>
-                    <div class="flex gap-2 flex-wrap">
-                        ${rec.tardy ? '<span class="inline-flex items-center text-xs font-medium rounded-full bg-yellow-100 text-yellow-800 px-2 py-0.5"><i class="fas fa-clock mr-1"></i>Late</span>' : ''}
-                        ${rec.undertime ? '<span class="inline-flex items-center text-xs font-medium rounded-full bg-orange-100 text-orange-800 px-2 py-0.5"><i class="fas fa-user-clock mr-1"></i>Undertime</span>' : ''}
-                        ${rec.overtime ? '<span class="inline-flex items-center text-xs font-medium rounded-full bg-blue-100 text-blue-800 px-2 py-0.5"><i class="fas fa-business-time mr-1"></i>Overtime</span>' : ''}
-                    </div>
-                </div>` : ''}
             `;
             detailsModal.classList.remove('hidden');
         }
@@ -997,12 +912,13 @@ document.addEventListener('DOMContentLoaded', () => {
                     background: #e0f2fe;
                 }
                 .date-col { 
-                    width: 25%; 
+                    width: 20%; 
                     font-weight: 600;
                     color: #0f172a;
+                    text-align: center;
                 }
                 .time-col { 
-                    width: 37.5%; 
+                    width: 20%; 
                     text-align: center;
                 }
                 .footer {
@@ -1066,16 +982,18 @@ document.addEventListener('DOMContentLoaded', () => {
         </div>
 
         <div class="employee-info">
-            <div><strong>Fullname of the User:</strong> <span>${userData.name}</span></div>
-            <div><strong>ID of the User:</strong> <span>${userData.employee_id}</span></div>
+            <div><strong>FULLNAME:</strong> <span>${userData.name}</span></div>
+            <div><strong>USER ID:</strong> <span>${userData.employee_id}</span></div>
         </div>
 
         <table>
             <thead>
                 <tr>
                     <th class="date-col">DATE</th>
-                    <th class="time-col">TIME IN</th>
-                    <th class="time-col">TIME OUT</th>
+                    <th class="time-col">AM IN</th>
+                    <th class="time-col">AM OUT</th>
+                    <th class="time-col">PM IN</th>
+                    <th class="time-col">PM OUT</th>
                 </tr>
             </thead>
             <tbody>
@@ -1084,14 +1002,18 @@ document.addEventListener('DOMContentLoaded', () => {
         // Add records
         filteredRecords.forEach(rec => {
             const date = rec.date || '';
-            const timeIn = rec.timeIn || '—';
-            const timeOut = rec.timeOut || '—';
+            const amIn = rec.amIn || '—';
+            const amOut = rec.amOut || '—';
+            const pmIn = rec.pmIn || '—';
+            const pmOut = rec.pmOut || '—';
 
             printHTML += `
                 <tr>
                     <td class="date-col">${date}</td>
-                    <td class="time-col">${timeIn}</td>
-                    <td class="time-col">${timeOut}</td>
+                    <td class="time-col">${amIn}</td>
+                    <td class="time-col">${amOut}</td>
+                    <td class="time-col">${pmIn}</td>
+                    <td class="time-col">${pmOut}</td>
                 </tr>
             `;
         });

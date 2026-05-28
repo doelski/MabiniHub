@@ -30,23 +30,24 @@ $allEmployees = $stmt->fetchAll(PDO::FETCH_COLUMN);
 $absentCount = 0;
 
 foreach ($allEmployees as $empId) {
-        // Check if employee has attendance record for today and whether they have a valid time_in
-        $check = $pdo->prepare('SELECT id, time_in, time_in_status FROM attendance WHERE employee_id = ? AND date = ? LIMIT 1');
+        // Check if employee has attendance record for today
+        $check = $pdo->prepare('SELECT id, am_in, pm_in, status FROM attendance WHERE employee_id = ? AND date = ? LIMIT 1');
         $check->execute([$empId, $today]);
         $record = $check->fetch(PDO::FETCH_ASSOC);
 
         if (!$record) {
-            // No record at all = Insert as Absent (use time_in_status to keep consistency)
-            $insert = $pdo->prepare('INSERT INTO attendance (employee_id, date, time_in, time_in_status, created_at) VALUES (?, ?, NULL, ?, NOW())');
-            $insert->execute([$empId, $today, 'Absent']);
+            // No record at all = No need to insert, absence is implicit
+            // Optionally create a placeholder record (commented out to avoid clutter)
+            // $insert = $pdo->prepare('INSERT INTO attendance (employee_id, date, am_in, am_out, pm_in, pm_out, status, created_at) VALUES (?, ?, NULL, NULL, NULL, NULL, NULL, NOW())');
+            // $insert->execute([$empId, $today]);
             $absentCount++;
         } else {
-            // If a record exists but has no time_in and not already Absent, update time_in_status
-            $timeIn = $record['time_in'];
-            $curStatus = strtolower($record['time_in_status'] ?? '');
-            if (empty($timeIn) && $curStatus !== 'absent') {
-                $update = $pdo->prepare('UPDATE attendance SET time_in_status = ?, time_in = NULL WHERE id = ?');
-                $update->execute(['Absent', $record['id']]);
+            // Record exists - absent is determined by: no am_in AND no pm_in AND not on leave
+            $dbStatus = strtolower($record['status'] ?? '');
+            $isOnLeave = ($dbStatus === 'on-leave' || $dbStatus === 'on leave' || $dbStatus === 'leave');
+            
+            if (empty($record['am_in']) && empty($record['pm_in']) && !$isOnLeave) {
+                // This employee is absent (no clock-ins and not on leave)
                 $absentCount++;
             }
         }

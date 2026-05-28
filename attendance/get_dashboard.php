@@ -18,10 +18,12 @@ $totStmt = $pdo->prepare($totSql);
 $totStmt->execute($totParams);
 $total = $totStmt->fetchColumn();
 
-// Present count (time_in_status = 'Present' only)
+// Present count (has am_in OR pm_in, excluding on-leave)
 $presentSql = 'SELECT COUNT(DISTINCT a.employee_id) FROM attendance a 
                JOIN users u ON a.employee_id = u.employee_id 
-               WHERE a.date = ? AND a.time_in_status = "Present"';
+               WHERE a.date = ? 
+               AND (a.am_in IS NOT NULL OR a.pm_in IS NOT NULL)
+               AND (a.status IS NULL OR a.status != "on-leave")';
 $presentParams = [$today];
 if ($dept) {
     $presentSql .= ' AND u.department = ?';
@@ -31,10 +33,26 @@ $presentStmt = $pdo->prepare($presentSql);
 $presentStmt->execute($presentParams);
 $present = $presentStmt->fetchColumn();
 
-// Late count (time_in_status = 'Late')
+// On Leave count
+$leaveSql = 'SELECT COUNT(DISTINCT a.employee_id) FROM attendance a 
+             JOIN users u ON a.employee_id = u.employee_id 
+             WHERE a.date = ? AND a.status = "on-leave"';
+$leaveParams = [$today];
+if ($dept) {
+    $leaveSql .= ' AND u.department = ?';
+    $leaveParams[] = $dept;
+}
+$leaveStmt = $pdo->prepare($leaveSql);
+$leaveStmt->execute($leaveParams);
+$onLeave = $leaveStmt->fetchColumn();
+
+// Late count (clocked in after 7:00 AM)
 $lateSql = 'SELECT COUNT(DISTINCT a.employee_id) FROM attendance a 
             JOIN users u ON a.employee_id = u.employee_id 
-            WHERE a.date = ? AND a.time_in_status = "Late"';
+            WHERE a.date = ? 
+            AND a.am_in IS NOT NULL 
+            AND TIME(a.am_in) > "07:00:00"
+            AND (a.status IS NULL OR a.status != "on-leave")';
 $lateParams = [$today];
 if ($dept) {
     $lateSql .= ' AND u.department = ?';
@@ -44,18 +62,8 @@ $lateStmt = $pdo->prepare($lateSql);
 $lateStmt->execute($lateParams);
 $late = $lateStmt->fetchColumn();
 
-// Undertime-at-time-in count (time_in_status = 'Undertime')
-$uiSql = 'SELECT COUNT(DISTINCT a.employee_id) FROM attendance a 
-            JOIN users u ON a.employee_id = u.employee_id 
-            WHERE a.date = ? AND a.time_in_status = "Undertime"';
-$uiParams = [$today];
-if ($dept) { $uiSql .= ' AND u.department = ?'; $uiParams[] = $dept; }
-$uiStmt = $pdo->prepare($uiSql);
-$uiStmt->execute($uiParams);
-$timeinUndertime = $uiStmt->fetchColumn();
-
-// Active = Present + Late + Time-in Undertime (anyone who timed in by 5:00 PM)
-$active = intval($present) + intval($late) + intval($timeinUndertime);
+// Active = Present + On Leave (anyone with attendance record)
+$active = intval($present) + intval($onLeave);
 
 // Absent = total - active
 $absent = max(0, intval($total) - intval($active));
@@ -65,7 +73,7 @@ echo json_encode([
     'total_employees' => intval($total),
     'present' => intval($present),
     'late' => intval($late),
-    'timein_undertime' => intval($timeinUndertime),
+    'on_leave' => intval($onLeave),
     'active' => intval($active),
     'absent' => intval($absent),
     'date' => $today,

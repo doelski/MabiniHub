@@ -25,12 +25,12 @@ try {
         $totalStmt->execute([$category]);
         $total = $totalStmt->fetchColumn();
         
-        // Active count (Present + Late) for this category today (all departments)
+        // Active count (has am_in OR pm_in) for this category today (all departments)
         $activeSql = 'SELECT COUNT(DISTINCT a.employee_id) 
                       FROM attendance a 
                       JOIN users u ON a.employee_id = u.employee_id 
                       WHERE a.date = ? 
-                      AND a.time_in_status IN ("Present", "Late")
+                      AND (a.am_in IS NOT NULL OR a.pm_in IS NOT NULL)
                       AND u.position = ?
                       AND u.status = "approved"';
         $activeStmt = $pdo->prepare($activeSql);
@@ -49,38 +49,31 @@ try {
     $totalStmt->execute();
     $totalEmployees = $totalStmt->fetchColumn();
     
-    // Get overall active count (Present + Late) for all departments
+    // Get overall active count (has am_in OR pm_in) for all departments
     $overallActiveSql = 'SELECT COUNT(DISTINCT a.employee_id) 
                          FROM attendance a 
                          JOIN users u ON a.employee_id = u.employee_id 
                          WHERE a.date = ? 
-                         AND a.time_in_status IN ("Present", "Late")
+                         AND (a.am_in IS NOT NULL OR a.pm_in IS NOT NULL)
                          AND u.status = "approved"';
     $overallActiveStmt = $pdo->prepare($overallActiveSql);
     $overallActiveStmt->execute([$today]);
     $overallActive = $overallActiveStmt->fetchColumn();
     
-    // Get present count (only Present status)
+    // Get present count (has am_in OR pm_in, not on leave)
     $presentSql = 'SELECT COUNT(DISTINCT a.employee_id) 
                    FROM attendance a 
                    JOIN users u ON a.employee_id = u.employee_id 
                    WHERE a.date = ? 
-                   AND a.time_in_status = "Present"
+                   AND (a.am_in IS NOT NULL OR a.pm_in IS NOT NULL)
+                   AND (a.status IS NULL OR a.status != "on-leave")
                    AND u.status = "approved"';
     $presentStmt = $pdo->prepare($presentSql);
     $presentStmt->execute([$today]);
     $present = $presentStmt->fetchColumn();
     
-    // Get late count
-    $lateSql = 'SELECT COUNT(DISTINCT a.employee_id) 
-                FROM attendance a 
-                JOIN users u ON a.employee_id = u.employee_id 
-                WHERE a.date = ? 
-                AND a.time_in_status = "Late"
-                AND u.status = "approved"';
-    $lateStmt = $pdo->prepare($lateSql);
-    $lateStmt->execute([$today]);
-    $late = $lateStmt->fetchColumn();
+    // Late count no longer tracked - always 0
+    $late = 0;
     
     // Absent count
     $absent = (int)$totalEmployees - (int)$overallActive;

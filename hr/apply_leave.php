@@ -614,7 +614,7 @@ require_role('hr');
     <script>
       // Dept head uses the same history UI but will fetch from the employee API (server session will determine results)
       (function () {
-        let API_URL = "/capstone/api/employee_leave_history.php";
+        let API_URL = "../api/employee_leave_history.php";
         const uEmail = localStorage.getItem("userEmail");
         if (uEmail) API_URL += `?email=${encodeURIComponent(uEmail)}`;
 
@@ -794,7 +794,7 @@ require_role('hr');
         async function resolveUserEmail() {
           try {
             // ALWAYS fetch from API first to ensure fresh data
-            const r = await fetch("/capstone/api/current_user.php");
+            const r = await fetch("../api/current_user.php");
             if (!r.ok) {
               console.error('[HR] Failed to fetch current user:', r.status);
               return "";
@@ -845,7 +845,7 @@ require_role('hr');
           let canApplyLeave = true;
           try {
             console.log('[HR] Checking leave status for:', email);
-            const statusResp = await fetch(`/capstone/api/get_employee_leave_status.php?email=${encodeURIComponent(email)}`);
+            const statusResp = await fetch(`../api/get_employee_leave_status.php?email=${encodeURIComponent(email)}`);
             console.log('[HR] Status response:', statusResp.status);
             
             if (!statusResp.ok) {
@@ -913,7 +913,7 @@ require_role('hr');
           // Fetch current user info to get gender
           let userGender = null;
           try {
-            const userResp = await fetch("/capstone/api/current_user.php");
+            const userResp = await fetch("../api/current_user.php");
             const userData = await userResp.json();
             if (userData && userData.logged_in) {
               userGender = userData.gender; // 'M' or 'F'
@@ -934,7 +934,7 @@ require_role('hr');
               }
             });
 
-          const API = "/capstone/api/employee_leave_credits.php";
+          const API = "../api/employee_leave_credits.php";
 
           try {
             const resp = await fetch(API);

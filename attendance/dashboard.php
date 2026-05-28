@@ -212,20 +212,8 @@ require_role(['hr', 'department_head', 'employee']);
         <button class="status-btn" data-status="Present" style="padding: 12px 24px; background: #10b981; color: #fff; border: none; border-radius: 8px; cursor: pointer; font-weight: 600; font-family: 'Poppins', sans-serif; font-size: 14px; transition: all 0.3s;">
             <i class="fas fa-check-circle"></i> Present Only
         </button>
-        <button class="status-btn" data-status="Late" style="padding: 12px 24px; background: #f59e0b; color: #fff; border: none; border-radius: 8px; cursor: pointer; font-weight: 600; font-family: 'Poppins', sans-serif; font-size: 14px; transition: all 0.3s;">
-            <i class="fas fa-clock"></i> Late Only
-        </button>
         <button class="status-btn" data-status="Absent" style="padding: 12px 24px; background: #ef4444; color: #fff; border: none; border-radius: 8px; cursor: pointer; font-weight: 600; font-family: 'Poppins', sans-serif; font-size: 14px; transition: all 0.3s;">
             <i class="fas fa-times-circle"></i> Absent Only
-        </button>
-        <button class="status-btn" data-status="Out" style="padding: 12px 24px; background: #14b8a6; color: #fff; border: none; border-radius: 8px; cursor: pointer; font-weight: 600; font-family: 'Poppins', sans-serif; font-size: 14px; transition: all 0.3s;">
-            <i class="fas fa-user-check"></i> Out
-        </button>
-        <button class="status-btn" data-status="Undertime" style="padding: 12px 24px; background: #fb923c; color: #fff; border: none; border-radius: 8px; cursor: pointer; font-weight: 600; font-family: 'Poppins', sans-serif; font-size: 14px; transition: all 0.3s;">
-            <i class="fas fa-hourglass-half"></i> Undertime
-        </button>
-        <button class="status-btn" data-status="Overtime" style="padding: 12px 24px; background: #3b82f6; color: #fff; border: none; border-radius: 8px; cursor: pointer; font-weight: 600; font-family: 'Poppins', sans-serif; font-size: 14px; transition: all 0.3s;">
-            <i class="fas fa-clock"></i> Overtime
         </button>
         <button class="status-btn" data-status="on-leave" style="padding: 12px 24px; background: #a855f7; color: #fff; border: none; border-radius: 8px; cursor: pointer; font-weight: 600; font-family: 'Poppins', sans-serif; font-size: 14px; transition: all 0.3s;">
             <i class="fas fa-umbrella-beach"></i> On Leave
@@ -287,10 +275,10 @@ require_role(['hr', 'department_head', 'employee']);
                             <th style="padding: 16px; text-align: left; font-weight: 700; color: #374151; text-transform: uppercase; font-size: 12px; letter-spacing: 0.5px; border-bottom: 2px solid #e5e7eb;">Name</th>
                             <th style="padding: 16px; text-align: left; font-weight: 700; color: #374151; text-transform: uppercase; font-size: 12px; letter-spacing: 0.5px; border-bottom: 2px solid #e5e7eb;">Department</th>
                             <th style="padding: 16px; text-align: left; font-weight: 700; color: #374151; text-transform: uppercase; font-size: 12px; letter-spacing: 0.5px; border-bottom: 2px solid #e5e7eb;">Date</th>
-                            <th style="padding: 16px; text-align: left; font-weight: 700; color: #374151; text-transform: uppercase; font-size: 12px; letter-spacing: 0.5px; border-bottom: 2px solid #e5e7eb;">Time In</th>
-                            <th style="padding: 16px; text-align: left; font-weight: 700; color: #374151; text-transform: uppercase; font-size: 12px; letter-spacing: 0.5px; border-bottom: 2px solid #e5e7eb;">Time In Status</th>
-                            <th style="padding: 16px; text-align: left; font-weight: 700; color: #374151; text-transform: uppercase; font-size: 12px; letter-spacing: 0.5px; border-bottom: 2px solid #e5e7eb;">Time Out</th>
-                            <th style="padding: 16px; text-align: left; font-weight: 700; color: #374151; text-transform: uppercase; font-size: 12px; letter-spacing: 0.5px; border-bottom: 2px solid #e5e7eb;">Time Out Status</th>
+                            <th style="padding: 16px; text-align: left; font-weight: 700; color: #374151; text-transform: uppercase; font-size: 12px; letter-spacing: 0.5px; border-bottom: 2px solid #e5e7eb;">AM In</th>
+                            <th style="padding: 16px; text-align: left; font-weight: 700; color: #374151; text-transform: uppercase; font-size: 12px; letter-spacing: 0.5px; border-bottom: 2px solid #e5e7eb;">AM Out</th>
+                            <th style="padding: 16px; text-align: left; font-weight: 700; color: #374151; text-transform: uppercase; font-size: 12px; letter-spacing: 0.5px; border-bottom: 2px solid #e5e7eb;">PM In</th>
+                            <th style="padding: 16px; text-align: left; font-weight: 700; color: #374151; text-transform: uppercase; font-size: 12px; letter-spacing: 0.5px; border-bottom: 2px solid #e5e7eb;">PM Out</th>
                             <th style="padding: 16px; text-align: left; font-weight: 700; color: #374151; text-transform: uppercase; font-size: 12px; letter-spacing: 0.5px; border-bottom: 2px solid #e5e7eb;">Status</th>
                         </tr>
                     </thead>
@@ -364,11 +352,11 @@ require_role(['hr', 'department_head', 'employee']);
                 const data = await res.json();
                 
                 if(data.success){
-                    document.getElementById('total').textContent = data.total_employees;
-                    document.getElementById('active').textContent = data.active || (data.present + data.late);
-                    document.getElementById('present').textContent = data.present;
-                    document.getElementById('late').textContent = data.late;
-                    document.getElementById('absent').textContent = data.absent;
+                    document.getElementById('total').textContent = data.total_employees || 0;
+                    document.getElementById('active').textContent = data.active || 0;
+                    document.getElementById('present').textContent = data.present || 0;
+                    document.getElementById('late').textContent = data.late || 0;
+                    document.getElementById('absent').textContent = data.absent || 0;
                     document.getElementById('last-update').textContent = new Date().toLocaleTimeString();
                 }
             } catch(err) {
@@ -473,15 +461,11 @@ require_role(['hr', 'department_head', 'employee']);
                     const dbStatus = (rec.status || '').toLowerCase().trim();
                     if(dbStatus === 'on-leave' || dbStatus === 'on leave' || dbStatus === 'leave') {
                         emp.onLeave++;
+                    } else if(!rec.am_in && !rec.pm_in) {
+                        emp.absent++;
                     } else {
-                        const timeInStatus = rec.time_in_status || 'Absent';
-                        if(timeInStatus === 'Present') emp.present++;
-                        else if(timeInStatus === 'Late') emp.late++;
-                        else if(timeInStatus === 'Absent') emp.absent++;
+                        emp.present++;
                     }
-                    
-                    if(rec.time_out_status === 'Undertime') emp.undertime++;
-                    if(rec.time_out_status === 'Overtime') emp.overtime++;
                 });
                 
                 // Render grouped records
@@ -519,11 +503,8 @@ require_role(['hr', 'department_head', 'employee']);
                         <td colspan="6" style="padding: 16px;">
                             <div style="display: flex; gap: 12px; flex-wrap: wrap;">
                                 <span style="padding: 4px 10px; border-radius: 6px; font-size: 11px; background: #dcfce7; color: #16a34a;"><i class="fas fa-check-circle"></i> Present: ${emp.present}</span>
-                                <span style="padding: 4px 10px; border-radius: 6px; font-size: 11px; background: #fef3c7; color: #d97706;"><i class="fas fa-clock"></i> Late: ${emp.late}</span>
                                 <span style="padding: 4px 10px; border-radius: 6px; font-size: 11px; background: #fee2e2; color: #dc2626;"><i class="fas fa-times-circle"></i> Absent: ${emp.absent}</span>
                                 <span style="padding: 4px 10px; border-radius: 6px; font-size: 11px; background: #e9d5ff; color: #9333ea;"><i class="fas fa-umbrella-beach"></i> On Leave: ${emp.onLeave}</span>
-                                <span style="padding: 4px 10px; border-radius: 6px; font-size: 11px; background: #fed7aa; color: #ea580c;"><i class="fas fa-hourglass-half"></i> Undertime: ${emp.undertime}</span>
-                                <span style="padding: 4px 10px; border-radius: 6px; font-size: 11px; background: #dbeafe; color: #2563eb;"><i class="fas fa-clock"></i> Overtime: ${emp.overtime}</span>
                                 <span style="padding: 4px 10px; border-radius: 6px; font-size: 11px; background: #e0e7ff; color: #4338ca;">Total Days: ${emp.records.length}</span>
                             </div>
                         </td>
@@ -538,39 +519,17 @@ require_role(['hr', 'department_head', 'employee']);
                             <table style="width: 100%; margin: 0;">
                                 <tbody>
                                     ${emp.records.map(rec => {
-                                        const timeIn = rec.time_in ? new Date(rec.time_in).toLocaleTimeString() : '-';
-                                        const timeOut = rec.time_out ? new Date(rec.time_out).toLocaleTimeString() : '-';
+                                        const amIn = rec.am_in ? new Date(rec.am_in).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : '—';
+                                        const amOut = rec.am_out ? new Date(rec.am_out).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : '—';
+                                        const pmIn = rec.pm_in ? new Date(rec.pm_in).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : '—';
+                                        const pmOut = rec.pm_out ? new Date(rec.pm_out).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : '—';
                                         
                                         // Check if on-leave FIRST
                                         const dbStatus = (rec.status || '').toLowerCase().trim();
                                         const isOnLeave = (dbStatus === 'on-leave' || dbStatus === 'on leave' || dbStatus === 'leave');
                                         
-                                        // Time In Status - hide if on leave
-                                        let timeInStatus = '-';
-                                        let timeInBg = '#f3f4f6';
-                                        let timeInColor = '#6b7280';
-                                        if(!isOnLeave) {
-                                            timeInStatus = rec.time_in_status || 'Absent';
-                                            timeInBg = '#fee2e2';
-                                            timeInColor = '#dc2626';
-                                            if(timeInStatus === 'Present') { timeInBg = '#dcfce7'; timeInColor = '#16a34a'; }
-                                            else if(timeInStatus === 'Late') { timeInBg = '#fef3c7'; timeInColor = '#d97706'; }
-                                            else if(timeInStatus === 'Undertime') { timeInBg = '#fde68a'; timeInColor = '#b45309'; }
-                                        }
-                                        
-                                        // Time Out Status - hide if on leave
-                                        let timeOutStatus = '-';
-                                        let timeOutBg = '#f3f4f6';
-                                        let timeOutColor = '#6b7280';
-                                        if(!isOnLeave) {
-                                            timeOutStatus = rec.time_out_status || '-';
-                                            if(timeOutStatus === 'On-time' || timeOutStatus === 'Out') { timeOutBg = '#d1fae5'; timeOutColor = '#059669'; }
-                                            else if(timeOutStatus === 'Undertime') { timeOutBg = '#fed7aa'; timeOutColor = '#ea580c'; }
-                                            else if(timeOutStatus === 'Overtime') { timeOutBg = '#dbeafe'; timeOutColor = '#2563eb'; }
-                                        }
-                                        
                                         // Overall Status
-                                        let overallStatus = 'Present';
+                                        let overallStatus = 'PRESENT';
                                         let statusBg = '#dcfce7';
                                         let statusColor = '#16a34a';
                                         
@@ -578,35 +537,23 @@ require_role(['hr', 'department_head', 'employee']);
                                             overallStatus = 'ON LEAVE';
                                             statusBg = '#e9d5ff';
                                             statusColor = '#9333ea';
-                                        } else if(timeInStatus === 'Absent' || !rec.time_in) {
+                                        } else if(!rec.am_in && !rec.pm_in) {
                                             overallStatus = 'ABSENT';
                                             statusBg = '#fee2e2';
                                             statusColor = '#dc2626';
-                                        } else if(timeOutStatus === 'Undertime') {
-                                            overallStatus = 'UNDERTIME';
-                                            statusBg = '#fed7aa';
-                                            statusColor = '#ea580c';
-                                        } else if(timeOutStatus === 'Overtime') {
-                                            overallStatus = 'OVERTIME';
-                                            statusBg = '#dbeafe';
-                                            statusColor = '#2563eb';
-                                        } else if(timeInStatus === 'Late') {
-                                            overallStatus = 'LATE';
-                                            statusBg = '#fef3c7';
-                                            statusColor = '#d97706';
                                         }
                                         
                                         return `
                                             <tr style="background: #fafafa; border-bottom: 1px solid #e5e7eb;">
-                                                <td style="padding: 12px 16px; padding-left: 48px; width: 11.1%;"></td>
-                                                <td style="padding: 12px 16px; width: 11.1%;"></td>
-                                                <td style="padding: 12px 16px; width: 11.1%;"></td>
-                                                <td style="padding: 12px 16px; width: 11.1%;"><strong>${rec.date || ''}</strong></td>
-                                                <td style="padding: 12px 16px; width: 11.1%;">${timeIn}</td>
-                                                <td style="padding: 12px 16px; width: 11.1%;">${timeInStatus === '-' ? '<span style="color: #9ca3af;">—</span>' : `<span style="padding: 4px 8px; border-radius: 4px; font-size: 11px; font-weight: 700; text-transform: uppercase; background: ${timeInBg}; color: ${timeInColor};">${timeInStatus}</span>`}</td>
-                                                <td style="padding: 12px 16px; width: 11.1%;">${timeOut}</td>
-                                                <td style="padding: 12px 16px; width: 11.1%;">${timeOutStatus === '-' ? '<span style="color: #9ca3af;">—</span>' : `<span style="padding: 4px 8px; border-radius: 4px; font-size: 11px; font-weight: 700; text-transform: uppercase; background: ${timeOutBg}; color: ${timeOutColor};">${timeOutStatus}</span>`}</td>
-                                                <td style="padding: 12px 16px; width: 11.1%;"><span style="padding: 4px 8px; border-radius: 4px; font-size: 11px; font-weight: 700; text-transform: uppercase; background: ${statusBg}; color: ${statusColor};">${overallStatus}</span></td>
+                                                <td style="padding: 12px 16px; padding-left: 48px; width: 12.5%;"></td>
+                                                <td style="padding: 12px 16px; width: 12.5%;"></td>
+                                                <td style="padding: 12px 16px; width: 12.5%;"></td>
+                                                <td style="padding: 12px 16px; width: 12.5%;"><strong>${rec.date || ''}</strong></td>
+                                                <td style="padding: 12px 16px; width: 12.5%;">${amIn}</td>
+                                                <td style="padding: 12px 16px; width: 12.5%;">${amOut}</td>
+                                                <td style="padding: 12px 16px; width: 12.5%;">${pmIn}</td>
+                                                <td style="padding: 12px 16px; width: 12.5%;">${pmOut}</td>
+                                                <td style="padding: 12px 16px; width: 12.5%;"><span style="padding: 4px 8px; border-radius: 4px; font-size: 11px; font-weight: 700; text-transform: uppercase; background: ${statusBg}; color: ${statusColor};">${overallStatus}</span></td>
                                             </tr>
                                         `;
                                     }).join('')}
@@ -626,39 +573,17 @@ require_role(['hr', 'department_head', 'employee']);
                     tr.onmouseover = function(){ this.style.background = '#f9fafb'; };
                     tr.onmouseout = function(){ this.style.background = ''; };
                     
-                    const timeIn = rec.time_in ? new Date(rec.time_in).toLocaleTimeString() : '-';
-                    const timeOut = rec.time_out ? new Date(rec.time_out).toLocaleTimeString() : '-';
+                    const amIn = rec.am_in ? new Date(rec.am_in).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : '—';
+                    const amOut = rec.am_out ? new Date(rec.am_out).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : '—';
+                    const pmIn = rec.pm_in ? new Date(rec.pm_in).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : '—';
+                    const pmOut = rec.pm_out ? new Date(rec.pm_out).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : '—';
                     
                     // Check if on-leave FIRST
                     const dbStatus = (rec.status || '').toLowerCase().trim();
                     const isOnLeave = (dbStatus === 'on-leave' || dbStatus === 'on leave' || dbStatus === 'leave');
                     
-                    // Time In Status - hide if on leave
-                    let timeInStatus = '-';
-                    let timeInBg = '#f3f4f6';
-                    let timeInColor = '#6b7280';
-                    if(!isOnLeave) {
-                        timeInStatus = rec.time_in_status || 'Absent';
-                        timeInBg = '#fee2e2';
-                        timeInColor = '#dc2626';
-                        if(timeInStatus === 'Present') { timeInBg = '#dcfce7'; timeInColor = '#16a34a'; }
-                        else if(timeInStatus === 'Late') { timeInBg = '#fef3c7'; timeInColor = '#d97706'; }
-                        else if(timeInStatus === 'Undertime') { timeInBg = '#fde68a'; timeInColor = '#b45309'; }
-                    }
-                    
-                    // Time Out Status - hide if on leave
-                    let timeOutStatus = '-';
-                    let timeOutBg = '#f3f4f6';
-                    let timeOutColor = '#6b7280';
-                    if(!isOnLeave) {
-                        timeOutStatus = rec.time_out_status || '-';
-                        if(timeOutStatus === 'On-time' || timeOutStatus === 'Out') { timeOutBg = '#d1fae5'; timeOutColor = '#059669'; }
-                        else if(timeOutStatus === 'Undertime') { timeOutBg = '#fed7aa'; timeOutColor = '#ea580c'; }
-                        else if(timeOutStatus === 'Overtime') { timeOutBg = '#dbeafe'; timeOutColor = '#2563eb'; }
-                    }
-                    
                     // Overall Status
-                    let overallStatus = 'Present';
+                    let overallStatus = 'PRESENT';
                     let statusBg = '#dcfce7';
                     let statusColor = '#16a34a';
                     
@@ -666,26 +591,10 @@ require_role(['hr', 'department_head', 'employee']);
                         overallStatus = 'ON LEAVE';
                         statusBg = '#e9d5ff';
                         statusColor = '#9333ea';
-                    } else if(timeInStatus === 'Absent' || (!rec.time_in && !isOnLeave)) {
+                    } else if(!rec.am_in && !rec.pm_in) {
                         overallStatus = 'ABSENT';
                         statusBg = '#fee2e2';
                         statusColor = '#dc2626';
-                    } else if(timeOutStatus === 'Undertime') {
-                        overallStatus = 'UNDERTIME';
-                        statusBg = '#fed7aa';
-                        statusColor = '#ea580c';
-                    } else if(timeOutStatus === 'Overtime') {
-                        overallStatus = 'OVERTIME';
-                        statusBg = '#dbeafe';
-                        statusColor = '#2563eb';
-                    } else if(timeInStatus === 'Late') {
-                        overallStatus = 'LATE';
-                        statusBg = '#fef3c7';
-                        statusColor = '#d97706';
-                    } else if(timeInStatus === 'Present') {
-                        overallStatus = 'PRESENT';
-                        statusBg = '#dcfce7';
-                        statusColor = '#16a34a';
                     }
                     
                     tr.innerHTML = `
@@ -693,10 +602,10 @@ require_role(['hr', 'department_head', 'employee']);
                         <td style="padding: 16px;">${rec.name || ''}</td>
                         <td style="padding: 16px;">${rec.department || ''}</td>
                         <td style="padding: 16px;">${rec.date || ''}</td>
-                        <td style="padding: 16px;">${timeIn}</td>
-                        <td style="padding: 16px;">${timeInStatus === '-' ? '<span style="color: #9ca3af;">—</span>' : `<span style="padding: 6px 12px; border-radius: 6px; font-size: 12px; font-weight: 700; text-transform: uppercase; background: ${timeInBg}; color: ${timeInColor};">${timeInStatus}</span>`}</td>
-                        <td style="padding: 16px;">${timeOut}</td>
-                        <td style="padding: 16px;">${timeOutStatus === '-' ? '<span style="color: #9ca3af;">—</span>' : `<span style="padding: 6px 12px; border-radius: 6px; font-size: 12px; font-weight: 700; text-transform: uppercase; background: ${timeOutBg}; color: ${timeOutColor};">${timeOutStatus}</span>`}</td>
+                        <td style="padding: 16px;">${amIn}</td>
+                        <td style="padding: 16px;">${amOut}</td>
+                        <td style="padding: 16px;">${pmIn}</td>
+                        <td style="padding: 16px;">${pmOut}</td>
                         <td style="padding: 16px;"><span style="padding: 6px 12px; border-radius: 6px; font-size: 12px; font-weight: 700; text-transform: uppercase; background: ${statusBg}; color: ${statusColor};">${overallStatus}</span></td>
                     `;
                     tbody.appendChild(tr);
@@ -719,27 +628,23 @@ require_role(['hr', 'department_head', 'employee']);
 
         function exportCSV(){
             if(currentRecords.length === 0){ alert('No data to export'); return; }
-            let csv = 'Employee ID,Name,Department,Date,Time In,Time In Status,Time Out,Time Out Status,Status\n';
+            let csv = 'Employee ID,Name,Department,Date,AM In,AM Out,PM In,PM Out,Status\n';
             currentRecords.forEach(rec=>{
                 const dbStatus = (rec.status || '').toLowerCase().trim();
                 const isOnLeave = (dbStatus === 'on-leave' || dbStatus === 'on leave' || dbStatus === 'leave');
                 
-                let timeInStatus = isOnLeave ? '' : (rec.time_in_status || 'Absent');
-                let timeOutStatus = isOnLeave ? '' : (rec.time_out_status || '');
+                const amIn = rec.am_in ? new Date(rec.am_in).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : '';
+                const amOut = rec.am_out ? new Date(rec.am_out).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : '';
+                const pmIn = rec.pm_in ? new Date(rec.pm_in).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : '';
+                const pmOut = rec.pm_out ? new Date(rec.pm_out).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : '';
                 
                 let overallStatus = 'Present';
                 if(isOnLeave) {
                     overallStatus = 'On Leave';
-                } else if(!rec.time_in || rec.time_in_status === 'Absent') {
+                } else if(!rec.am_in && !rec.pm_in) {
                     overallStatus = 'Absent';
-                } else if(rec.time_out_status === 'Undertime') {
-                    overallStatus = 'Undertime';
-                } else if(rec.time_out_status === 'Overtime') {
-                    overallStatus = 'Overtime';
-                } else if(rec.time_in_status === 'Late') {
-                    overallStatus = 'Late';
                 }
-                csv += `"${rec.employee_id || ''}","${rec.name || ''}","${rec.department || ''}","${rec.date || ''}","${rec.time_in || ''}","${timeInStatus}","${rec.time_out || ''}","${timeOutStatus}","${overallStatus}"\n`;
+                csv += `"${rec.employee_id || ''}","${rec.name || ''}","${rec.department || ''}","${rec.date || ''}","${amIn}","${amOut}","${pmIn}","${pmOut}","${overallStatus}"\n`;
             });
             downloadFile(csv, 'attendance_' + getDateRangeLabel() + '.csv', 'text/csv');
         }
@@ -747,27 +652,23 @@ require_role(['hr', 'department_head', 'employee']);
         function exportExcel(){
             if(currentRecords.length === 0){ alert('No data to export'); return; }
             let html = '<html><head><meta charset="utf-8"></head><body><table border="1">';
-            html += '<tr><th>Employee ID</th><th>Name</th><th>Department</th><th>Date</th><th>Time In</th><th>Time In Status</th><th>Time Out</th><th>Time Out Status</th><th>Status</th></tr>';
+            html += '<tr><th>Employee ID</th><th>Name</th><th>Department</th><th>Date</th><th>AM In</th><th>AM Out</th><th>PM In</th><th>PM Out</th><th>Status</th></tr>';
             currentRecords.forEach(rec=>{
                 const dbStatus = (rec.status || '').toLowerCase().trim();
                 const isOnLeave = (dbStatus === 'on-leave' || dbStatus === 'on leave' || dbStatus === 'leave');
                 
-                let timeInStatus = isOnLeave ? '' : (rec.time_in_status || 'Absent');
-                let timeOutStatus = isOnLeave ? '' : (rec.time_out_status || '');
+                const amIn = rec.am_in ? new Date(rec.am_in).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : '';
+                const amOut = rec.am_out ? new Date(rec.am_out).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : '';
+                const pmIn = rec.pm_in ? new Date(rec.pm_in).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : '';
+                const pmOut = rec.pm_out ? new Date(rec.pm_out).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : '';
                 
                 let overallStatus = 'Present';
                 if(isOnLeave) {
                     overallStatus = 'On Leave';
-                } else if(!rec.time_in || rec.time_in_status === 'Absent') {
+                } else if(!rec.am_in && !rec.pm_in) {
                     overallStatus = 'Absent';
-                } else if(rec.time_out_status === 'Undertime') {
-                    overallStatus = 'Undertime';
-                } else if(rec.time_out_status === 'Overtime') {
-                    overallStatus = 'Overtime';
-                } else if(rec.time_in_status === 'Late') {
-                    overallStatus = 'Late';
                 }
-                html += `<tr><td>${rec.employee_id || ''}</td><td>${rec.name || ''}</td><td>${rec.department || ''}</td><td>${rec.date || ''}</td><td>${rec.time_in || ''}</td><td>${timeInStatus}</td><td>${rec.time_out || ''}</td><td>${timeOutStatus}</td><td>${overallStatus}</td></tr>`;
+                html += `<tr><td>${rec.employee_id || ''}</td><td>${rec.name || ''}</td><td>${rec.department || ''}</td><td>${rec.date || ''}</td><td>${amIn}</td><td>${amOut}</td><td>${pmIn}</td><td>${pmOut}</td><td>${overallStatus}</td></tr>`;
             });
             html += '</table></body></html>';
             downloadFile(html, 'attendance_' + getDateRangeLabel() + '.xls', 'application/vnd.ms-excel');

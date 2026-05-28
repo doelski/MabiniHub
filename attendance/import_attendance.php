@@ -243,13 +243,13 @@ try {
     // This ensures ALL fields are updated when re-importing (based on UNIQUE key: employee_id, date)
     $upsertStmt = $pdo->prepare("
         INSERT INTO attendance 
-        (employee_id, date, time_in, time_in_status, time_out, time_out_status, status, created_at, updated_at)
-        VALUES (:eid, :dt, :tin, :tin_status, :tout, :tout_status, :status, NOW(), NOW())
+        (employee_id, date, am_in, am_out, pm_in, pm_out, status, created_at, updated_at)
+        VALUES (:eid, :dt, :am_in, :am_out, :pm_in, :pm_out, :status, NOW(), NOW())
         ON DUPLICATE KEY UPDATE
-            time_in = VALUES(time_in),
-            time_in_status = VALUES(time_in_status),
-            time_out = VALUES(time_out),
-            time_out_status = VALUES(time_out_status),
+            am_in = VALUES(am_in),
+            am_out = VALUES(am_out),
+            pm_in = VALUES(pm_in),
+            pm_out = VALUES(pm_out),
             status = VALUES(status),
             updated_at = NOW()
     ");
@@ -285,8 +285,10 @@ try {
             // Flexible keys
             $eidRaw = $mapField($r, ['employee_id','emp_id','employee_number','employee_code','employee','id']);
             $dateVal = $mapField($r, ['date','attendance_date','day']);
-            $timeInVal = $mapField($r, ['time_in','in','check_in']);
-            $timeOutVal = $mapField($r, ['time_out','out','check_out']);
+            $amInVal = $mapField($r, ['am_in','morning_in','am_time_in']);
+            $amOutVal = $mapField($r, ['am_out','morning_out','am_time_out']);
+            $pmInVal = $mapField($r, ['pm_in','afternoon_in','pm_time_in']);
+            $pmOutVal = $mapField($r, ['pm_out','afternoon_out','pm_time_out']);
 
             // Validate employee_id and date first
             if (!$eidRaw || !$dateVal) { 
@@ -306,9 +308,6 @@ try {
                 }
                 continue; 
             }
-            
-            $tinStatus = null;
-            $toutStatus = null;
 
             // Normalize date to Y-m-d with STRICT DD/MM/YYYY parsing
             $date = null;
@@ -355,78 +354,28 @@ try {
             }
 
             // Normalize time fields to Y-m-d H:i:s (DATETIME format) or null
-            $timeIn = null; $timeOut = null;
-            if ($timeInVal !== null && $timeInVal !== '') {
-                $t = strtotime((string)$timeInVal);
-                if ($t !== false) $timeIn = date('Y-m-d H:i:s', strtotime($date.' '.date('H:i:s', $t)));
-            }
-            if ($timeOutVal !== null && $timeOutVal !== '') {
-                $t = strtotime((string)$timeOutVal);
-                if ($t !== false) $timeOut = date('Y-m-d H:i:s', strtotime($date.' '.date('H:i:s', $t)));
-            }
-
-            // FINALIZED TIME RANGE LOGIC
-            // TIME IN: 4am-7am=Present, 7:01am-12pm=Late, 10am+=Absent
-            // TIME OUT: 1pm-4:59pm=Undertime, 5pm-6pm=Out, 6:01pm-8pm=Overtime
+            $amIn = null; $amOut = null; $pmIn = null; $pmOut = null;
             
-            $tinStatus = null;
-            if ($timeIn) {
-                $tIn = strtotime($timeIn);
-                $present_start = strtotime($date . ' 04:00:00'); // 4:00 AM
-                $present_end   = strtotime($date . ' 07:00:00'); // 7:00 AM
-                $late_end      = strtotime($date . ' 12:00:00'); // 12:00 PM
-                $absent_cutoff = strtotime($date . ' 10:00:00'); // 10:00 AM
-
-                if ($tIn >= $absent_cutoff) {
-                    // 10:00 AM or later = Absent
-                    $tinStatus = 'Absent';
-                } elseif ($tIn >= $present_start && $tIn <= $present_end) {
-                    // 4:00 AM - 7:00 AM = Present
-                    $tinStatus = 'Present';
-                } elseif ($tIn > $present_end && $tIn <= $late_end) {
-                    // 7:01 AM - 12:00 PM = Late
-                    $tinStatus = 'Late';
-                } else {
-                    // Before 4:00 AM = Present (very early)
-                    $tinStatus = 'Present';
-                }
-            } else {
-                $tinStatus = 'Absent';
+            if ($amInVal !== null && $amInVal !== '') {
+                $t = strtotime((string)$amInVal);
+                if ($t !== false) $amIn = date('Y-m-d H:i:s', strtotime($date.' '.date('H:i:s', $t)));
+            }
+            if ($amOutVal !== null && $amOutVal !== '') {
+                $t = strtotime((string)$amOutVal);
+                if ($t !== false) $amOut = date('Y-m-d H:i:s', strtotime($date.' '.date('H:i:s', $t)));
+            }
+            if ($pmInVal !== null && $pmInVal !== '') {
+                $t = strtotime((string)$pmInVal);
+                if ($t !== false) $pmIn = date('Y-m-d H:i:s', strtotime($date.' '.date('H:i:s', $t)));
+            }
+            if ($pmOutVal !== null && $pmOutVal !== '') {
+                $t = strtotime((string)$pmOutVal);
+                if ($t !== false) $pmOut = date('Y-m-d H:i:s', strtotime($date.' '.date('H:i:s', $t)));
             }
 
-            $toutStatus = null;
-            if ($timeOut) {
-                $tOut = strtotime($timeOut);
-                $undertime_start = strtotime($date . ' 13:00:00'); // 1:00 PM
-                $undertime_end   = strtotime($date . ' 16:59:59'); // 4:59:59 PM
-                $out_start       = strtotime($date . ' 17:00:00'); // 5:00 PM
-                $out_end         = strtotime($date . ' 18:00:00'); // 6:00 PM
-                $overtime_start  = strtotime($date . ' 18:00:01'); // 6:01 PM
-                $overtime_end    = strtotime($date . ' 20:00:00'); // 8:00 PM
-
-                if ($tOut >= $undertime_start && $tOut <= $undertime_end) {
-                    // 1:00 PM - 4:59 PM = Undertime
-                    $toutStatus = 'Undertime';
-                } elseif ($tOut >= $out_start && $tOut <= $out_end) {
-                    // 5:00 PM - 6:00 PM = Out
-                    $toutStatus = 'Out';
-                } elseif ($tOut >= $overtime_start && $tOut <= $overtime_end) {
-                    // 6:01 PM - 8:00 PM = Overtime
-                    $toutStatus = 'Overtime';
-                } else {
-                    $toutStatus = 'Out';
-                }
-            }
-
-            // Calculate overall daily status
+            // Calculate overall daily status based on presence of times
             $dailyStatus = 'absent'; // default
-            if ($tinStatus === 'Absent' || !$timeIn) {
-                $dailyStatus = 'absent';
-            } elseif ($toutStatus === 'Undertime') {
-                $dailyStatus = 'undertime';
-            } elseif ($tinStatus === 'Late') {
-                $dailyStatus = 'late';
-            } elseif ($tinStatus === 'Present') {
+            if ($amIn || $pmIn) {
                 $dailyStatus = 'present';
             }
 
@@ -450,10 +399,10 @@ try {
             $upsertStmt->execute([
                 ':eid' => $eid,
                 ':dt' => $date,
-                ':tin' => $timeIn,
-                ':tin_status' => $tinStatus,
-                ':tout' => $timeOut,
-                ':tout_status' => $toutStatus,
+                ':am_in' => $amIn,
+                ':am_out' => $amOut,
+                ':pm_in' => $pmIn,
+                ':pm_out' => $pmOut,
                 ':status' => $finalStatus,
             ]);
             

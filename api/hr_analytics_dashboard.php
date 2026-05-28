@@ -90,7 +90,8 @@ try {
                        FROM attendance a 
                        JOIN users u ON a.employee_id = u.employee_id 
                        WHERE a.date >= ? AND a.date <= ?
-                       AND a.time_in_status IN ("Present", "Late")
+                       AND (a.am_in IS NOT NULL OR a.pm_in IS NOT NULL)
+                       AND (a.status IS NULL OR a.status != "on-leave")
                        AND u.status = "approved"' . $deptWhereClause;
     $activeStmt = $pdo->prepare($activePeriodSql);
     $activeParams = [$startDate, $endDate];
@@ -106,7 +107,8 @@ try {
                           FROM attendance a 
                           JOIN users u ON a.employee_id = u.employee_id 
                           WHERE a.date >= ? AND a.date <= ?
-                          AND a.time_in_status IN ("Present", "Late")
+                          AND (a.am_in IS NOT NULL OR a.pm_in IS NOT NULL)
+                          AND (a.status IS NULL OR a.status != "on-leave")
                           AND u.status = "approved"' . $deptWhereClause;
     $totalAttendanceStmt = $pdo->prepare($totalAttendanceSql);
     $totalAttendanceParams = [$startDate, $endDate];
@@ -209,7 +211,8 @@ try {
                           FROM attendance a 
                           JOIN users u ON a.employee_id = u.employee_id 
                           WHERE a.date >= ? AND a.date <= ?
-                          AND a.time_in_status IN ("Present", "Late")
+                          AND (a.am_in IS NOT NULL OR a.pm_in IS NOT NULL)
+                          AND (a.status IS NULL OR a.status != "on-leave")
                           AND u.department = ?
                           AND u.status = "approved"';
         $deptActiveStmt = $pdo->prepare($deptActiveSql);
@@ -221,7 +224,8 @@ try {
                                    FROM attendance a 
                                    JOIN users u ON a.employee_id = u.employee_id 
                                    WHERE a.date >= ? AND a.date <= ?
-                                   AND a.time_in_status IN ("Present", "Late")
+                                   AND (a.am_in IS NOT NULL OR a.pm_in IS NOT NULL)
+                                   AND (a.status IS NULL OR a.status != "on-leave")
                                    AND u.department = ?
                                    AND u.status = "approved"';
         $deptTotalAttendanceStmt = $pdo->prepare($deptTotalAttendanceSql);
@@ -388,7 +392,9 @@ try {
                            FROM attendance a 
                            JOIN users u ON a.employee_id = u.employee_id 
                            WHERE a.date >= ? AND a.date <= ?
-                           AND a.time_in_status = "Present"
+                           AND a.am_in IS NOT NULL
+                           AND (a.status IS NULL OR a.status != "on-leave")
+                           AND TIME(a.am_in) <= "07:00:00"
                            AND u.status = "approved"' . $deptWhereClause;
             $presentStmt = $pdo->prepare($presentSql);
             $presentParams = [$monthStart, $monthEnd];
@@ -403,7 +409,9 @@ try {
                         FROM attendance a 
                         JOIN users u ON a.employee_id = u.employee_id 
                         WHERE a.date >= ? AND a.date <= ?
-                        AND a.time_in_status = "Late"
+                        AND a.am_in IS NOT NULL
+                        AND (a.status IS NULL OR a.status != "on-leave")
+                        AND TIME(a.am_in) > "07:00:00"
                         AND u.status = "approved"' . $deptWhereClause;
             $lateStmt = $pdo->prepare($lateSql);
             $lateParams = [$monthStart, $monthEnd];
@@ -461,7 +469,9 @@ try {
                            FROM attendance a 
                            JOIN users u ON a.employee_id = u.employee_id 
                            WHERE a.date >= ? AND a.date <= ?
-                           AND a.time_in_status = "Present"
+                           AND a.am_in IS NOT NULL
+                           AND (a.status IS NULL OR a.status != "on-leave")
+                           AND TIME(a.am_in) <= "07:00:00"
                            AND u.status = "approved"' . $deptWhereClause;
             $presentStmt = $pdo->prepare($presentSql);
             $presentParams = [$monthStart, $monthEnd];
@@ -476,7 +486,9 @@ try {
                         FROM attendance a 
                         JOIN users u ON a.employee_id = u.employee_id 
                         WHERE a.date >= ? AND a.date <= ?
-                        AND a.time_in_status = "Late"
+                        AND a.am_in IS NOT NULL
+                        AND (a.status IS NULL OR a.status != "on-leave")
+                        AND TIME(a.am_in) > "07:00:00"
                         AND u.status = "approved"' . $deptWhereClause;
             $lateStmt = $pdo->prepare($lateSql);
             $lateParams = [$monthStart, $monthEnd];
@@ -549,7 +561,9 @@ try {
                            FROM attendance a 
                            JOIN users u ON a.employee_id = u.employee_id 
                            WHERE a.date = ? 
-                           AND a.time_in_status = "Present"
+                           AND a.am_in IS NOT NULL
+                           AND (a.status IS NULL OR a.status != "on-leave")
+                           AND TIME(a.am_in) <= "07:00:00"
                            AND u.status = "approved"' . $deptWhereClause;
             $presentStmt = $pdo->prepare($presentSql);
             $presentParams = [$date];
@@ -564,7 +578,9 @@ try {
                         FROM attendance a 
                         JOIN users u ON a.employee_id = u.employee_id 
                         WHERE a.date = ? 
-                        AND a.time_in_status = "Late"
+                        AND a.am_in IS NOT NULL
+                        AND (a.status IS NULL OR a.status != "on-leave")
+                        AND TIME(a.am_in) > "07:00:00"
                         AND u.status = "approved"' . $deptWhereClause;
             $lateStmt = $pdo->prepare($lateSql);
             $lateParams = [$date];

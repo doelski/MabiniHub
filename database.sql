@@ -1,24 +1,6 @@
--- ============================================================================
--- MabiniHub Employee Management System - Database Schema
--- Finalized Version - Ready for Deployment
--- ============================================================================
--- This database schema is production-ready and includes:
--- - User management with role-based access (employee, department_head, hr, municipal admin)
--- - Leave request workflow with multi-level approvals
--- - CSV-based attendance tracking with time range rules
--- - Task assignment system
--- - Event management
--- - Notification system
--- ============================================================================
-
 CREATE DATABASE IF NOT EXISTS `capstone` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 USE `capstone`;
 
--- ============================================================================
--- USERS TABLE
--- ============================================================================
--- Manages all system users including employees, department heads, HR staff
--- Includes leave credits, archiving support, and employee identification
 CREATE TABLE IF NOT EXISTS users (
 	id INT AUTO_INCREMENT PRIMARY KEY,
 	lastname VARCHAR(100) NOT NULL,
@@ -47,10 +29,6 @@ CREATE TABLE IF NOT EXISTS users (
 	INDEX idx_department (department)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- ============================================================================
--- EVENTS TABLE
--- ============================================================================
--- Manages organizational events visible to all employees
 CREATE TABLE IF NOT EXISTS events (
     id INT AUTO_INCREMENT PRIMARY KEY,
     title VARCHAR(255) NOT NULL,
@@ -63,12 +41,6 @@ CREATE TABLE IF NOT EXISTS events (
     INDEX idx_date (date)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- ============================================================================
--- LEAVE REQUESTS TABLE
--- ============================================================================
--- Handles leave applications with multi-level approval workflow:
--- Employee -> Department Head -> HR -> Municipal Admin (final approval)
--- When approved_by_municipal=1, auto-creates attendance with status='on-leave'
 CREATE TABLE IF NOT EXISTS leave_requests (
 	id INT AUTO_INCREMENT PRIMARY KEY,
 	employee_email VARCHAR(100) NOT NULL,
@@ -110,11 +82,6 @@ CREATE TABLE IF NOT EXISTS leave_requests (
 	INDEX idx_approved_by_municipal (approved_by_municipal)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- ============================================================================
--- EMPLOYEE LEAVE CREDITS OVERRIDE TABLE
--- ============================================================================
--- Allows HR to manually set custom leave credits for specific employees
--- Overrides default vacation_leave and sick_leave from users table
 CREATE TABLE IF NOT EXISTS employee_leave_credits_override (
 	id INT AUTO_INCREMENT PRIMARY KEY,
 	employee_email VARCHAR(100) NOT NULL,
@@ -126,12 +93,6 @@ CREATE TABLE IF NOT EXISTS employee_leave_credits_override (
 	INDEX idx_employee_email (employee_email),
 	INDEX idx_leave_type (leave_type)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
--- ============================================================================
--- SIGNATURE TABLES
--- ============================================================================
--- Store signature images for reuse across leave applications
--- Each user role has their own signature storage table
 
 -- Employee signatures
 CREATE TABLE IF NOT EXISTS employee_signatures (
@@ -169,10 +130,6 @@ CREATE TABLE IF NOT EXISTS municipal_signatures (
 	updated_at TIMESTAMP NULL DEFAULT NULL ON UPDATE CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- ============================================================================
--- NOTIFICATIONS TABLE
--- ============================================================================
--- System notifications for leave recalls and other important updates
 CREATE TABLE IF NOT EXISTS notifications (
 	id INT AUTO_INCREMENT PRIMARY KEY,
 	recipient_email VARCHAR(100),
@@ -185,11 +142,6 @@ CREATE TABLE IF NOT EXISTS notifications (
 	INDEX idx_is_read (is_read)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- ============================================================================
--- TASKS TABLE
--- ============================================================================
--- Department heads can assign tasks to employees with attachments and deadlines
--- Supports task lifecycle: pending -> in_progress -> completed
 CREATE TABLE IF NOT EXISTS tasks (
 	id INT AUTO_INCREMENT PRIMARY KEY,
 	title VARCHAR(255) NOT NULL,
@@ -212,40 +164,14 @@ CREATE TABLE IF NOT EXISTS tasks (
 	INDEX idx_due_date (due_date)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- ============================================================================
--- ATTENDANCE TABLE
--- ============================================================================
--- CSV-based attendance tracking with finalized time range rules
--- 
--- TIME RANGE RULES (applied during CSV import):
---   TIME IN STATUS:
---     Present:    4:00 AM - 7:00 AM
---     Late:       7:01 AM - 12:00 PM (noon)
---     Absent:     10:00 AM onwards (no time in before 10 AM)
---   
---   TIME OUT STATUS:
---     Undertime:  1:00 PM - 4:59 PM
---     Out:        5:00 PM - 6:00 PM (normal dismissal)
---     Overtime:   6:01 PM - 8:00 PM
--- 
--- SPECIAL STATUS HANDLING:
---   - status='on-leave' is auto-created when Municipal Admin approves leave
---   - When status='on-leave', display shows only "ON LEAVE" badge (purple)
---   - Time In/Out Status columns show dash (—) when on leave
---   - Database stores dates as YYYY-MM-DD, CSV imports as DD/MM/YYYY
--- 
--- UNIQUE CONSTRAINT:
---   - One attendance record per employee per date (employee_id, date)
---   - CSV import uses INSERT...ON DUPLICATE KEY UPDATE for upsert behavior
--- ============================================================================
 CREATE TABLE IF NOT EXISTS attendance (
     id INT AUTO_INCREMENT PRIMARY KEY,
     employee_id VARCHAR(100) NOT NULL,
     date DATE NOT NULL COMMENT 'Attendance date in YYYY-MM-DD format',
-    time_in DATETIME DEFAULT NULL COMMENT 'Full date-time of clock in (not just time)',
-    time_out DATETIME DEFAULT NULL COMMENT 'Full date-time of clock out (not just time)',
-	time_in_status ENUM('Present','Late','Undertime','Absent') DEFAULT NULL COMMENT 'Time In Status calculated from time ranges: Present (4am-7am), Late (7:01am-12pm), Absent (10am+)',
-	time_out_status ENUM('Out','Undertime','Overtime','On-time') DEFAULT NULL COMMENT 'Time Out Status: Undertime (1pm-4:59pm), Out (5pm-6pm), Overtime (6:01pm-8pm). On-time for backward compatibility.',
+    am_in DATETIME DEFAULT NULL COMMENT 'AM clock in time',
+    am_out DATETIME DEFAULT NULL COMMENT 'AM clock out time',
+    pm_in DATETIME DEFAULT NULL COMMENT 'PM clock in time',
+    pm_out DATETIME DEFAULT NULL COMMENT 'PM clock out time',
     status VARCHAR(20) DEFAULT NULL COMMENT 'Special status: on-leave (auto-set when Municipal Admin approves leave), or overall daily status',
     notes TEXT DEFAULT NULL COMMENT 'Additional notes or remarks',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -280,11 +206,3 @@ CREATE TABLE IF NOT EXISTS system_config (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
--- ============================================================================
--- END OF DATABASE SCHEMA
--- ============================================================================
--- This schema is ready for deployment on a fresh system
--- No fingerprint or QR code tables - attendance is CSV-based only
--- All time ranges finalized, leave integration complete
--- ============================================================================

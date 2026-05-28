@@ -229,7 +229,7 @@ try {
                         // Use INSERT ... ON DUPLICATE KEY UPDATE to handle existing records
                         $attStmt = $pdo->prepare("
                             INSERT INTO attendance 
-                            (employee_id, date, time_in, time_out, time_in_status, time_out_status, status, created_at, updated_at)
+                            (employee_id, date, am_in, am_out, pm_in, pm_out, status, created_at, updated_at)
                             VALUES (?, ?, NULL, NULL, NULL, NULL, 'on-leave', NOW(), NOW())
                             ON DUPLICATE KEY UPDATE
                                 status = 'on-leave',

@@ -1269,7 +1269,7 @@ try {
                     if (joTotal) joTotal.textContent = countJO;
                     if (ojtTotal) ojtTotal.textContent = countOJT;
                     
-                    // Active counts based on today's attendance (who have time_in today)
+                    // Active counts based on today's attendance (who have am_in OR pm_in today)
                     const activeCounts = activeData.active;
                     const permanentActive = document.getElementById('permanent-active');
                     const casualActive = document.getElementById('casual-active');

@@ -54,7 +54,7 @@ try {
 
     // Fetch all attendance records for the period
     $stmt = $pdo->prepare('
-        SELECT date, time_in_status, time_out_status 
+        SELECT date, am_in, pm_out, status 
         FROM attendance 
         WHERE employee_id = ? AND date >= ? AND date <= ?
         ORDER BY date ASC
@@ -86,11 +86,36 @@ try {
             $record = array_filter($allRecords, fn($r) => $r['date'] === $dateKey);
             $record = reset($record);
             
-            $present = ($record && $record['time_in_status'] === 'Present') ? 1 : 0;
-            $late = ($record && $record['time_in_status'] === 'Late') ? 1 : 0;
-            $timeinUndertime = ($record && $record['time_in_status'] === 'Undertime') ? 1 : 0;
-            $undertime = ($record && $record['time_out_status'] === 'Undertime') ? 1 : 0;
-            $overtime = ($record && $record['time_out_status'] === 'Overtime') ? 1 : 0;
+            // Check present/late based on am_in time
+            $present = 0;
+            $late = 0;
+            $timeinUndertime = 0;
+            if ($record && $record['am_in'] && (!$record['status'] || $record['status'] != 'on-leave')) {
+                $amInTime = new DateTime($record['am_in']);
+                $cutoffTime = new DateTime($dateKey . ' 07:00:00');
+                if ($amInTime <= $cutoffTime) {
+                    $present = 1;
+                } else {
+                    $late = 1;
+                }
+            }
+            
+            // Check undertime/overtime based on pm_out
+            // Undertime: 3:00 PM - 4:59 PM | Normal: 5:00 PM - 6:00 PM | Overtime: 6:01 PM - 7:00 PM
+            $undertime = 0;
+            $overtime = 0;
+            if ($record && $record['pm_out']) {
+                $pmOutTime = new DateTime($record['pm_out']);
+                $undertimeEnd = new DateTime($dateKey . ' 16:59:59'); // 4:59:59 PM
+                $overtimeStart = new DateTime($dateKey . ' 18:00:01'); // 6:00:01 PM
+                
+                if ($pmOutTime <= $undertimeEnd) {
+                    $undertime = 1;
+                } elseif ($pmOutTime > $overtimeStart) {
+                    $overtime = 1;
+                }
+            }
+            
             $absent = (!$record || (!$present && !$late && !$timeinUndertime)) ? 1 : 0;
             
             $totalPresent += $present;
@@ -126,20 +151,32 @@ try {
             
             $counts = ['present' => 0, 'late' => 0, 'undertime' => 0, 'overtime' => 0, 'absent' => $weekWorkingDays];
             foreach ($weekRecords as $r) {
-                if ($r['time_in_status'] === 'Present') {
-                    $counts['present']++;
-                    $counts['absent']--;
+                // Check present/late based on am_in
+                if ($r['am_in'] && (!$r['status'] || $r['status'] != 'on-leave')) {
+                    $amInTime = new DateTime($r['am_in']);
+                    $cutoffTime = new DateTime($r['date'] . ' 07:00:00');
+                    if ($amInTime <= $cutoffTime) {
+                        $counts['present']++;
+                        $counts['absent']--;
+                    } else {
+                        $counts['late']++;
+                        $counts['absent']--;
+                    }
                 }
-                if ($r['time_in_status'] === 'Late') {
-                    $counts['late']++;
-                    $counts['absent']--;
+                
+                // Check undertime/overtime based on pm_out
+                // Undertime: 3:00 PM - 4:59 PM | Normal: 5:00 PM - 6:00 PM | Overtime: 6:01 PM - 7:00 PM
+                if ($r['pm_out']) {
+                    $pmOutTime = new DateTime($r['pm_out']);
+                    $undertimeEnd = new DateTime($r['date'] . ' 16:59:59'); // 4:59:59 PM
+                    $overtimeStart = new DateTime($r['date'] . ' 18:00:01'); // 6:00:01 PM
+                    
+                    if ($pmOutTime <= $undertimeEnd) {
+                        $counts['undertime']++;
+                    } elseif ($pmOutTime > $overtimeStart) {
+                        $counts['overtime']++;
+                    }
                 }
-                if ($r['time_in_status'] === 'Undertime') {
-                    // Count as attended day as well (late time-in)
-                    $counts['absent']--;
-                }
-                if ($r['time_out_status'] === 'Undertime') $counts['undertime']++;
-                if ($r['time_out_status'] === 'Overtime') $counts['overtime']++;
             }
             
             $totalPresent += $counts['present'];
@@ -176,20 +213,32 @@ try {
             
             $counts = ['present' => 0, 'late' => 0, 'undertime' => 0, 'overtime' => 0, 'absent' => $monthWorkingDays];
             foreach ($monthRecords as $r) {
-                if ($r['time_in_status'] === 'Present') {
-                    $counts['present']++;
-                    $counts['absent']--;
+                // Check present/late based on am_in
+                if ($r['am_in'] && (!$r['status'] || $r['status'] != 'on-leave')) {
+                    $amInTime = new DateTime($r['am_in']);
+                    $cutoffTime = new DateTime($r['date'] . ' 07:00:00');
+                    if ($amInTime <= $cutoffTime) {
+                        $counts['present']++;
+                        $counts['absent']--;
+                    } else {
+                        $counts['late']++;
+                        $counts['absent']--;
+                    }
                 }
-                if ($r['time_in_status'] === 'Late') {
-                    $counts['late']++;
-                    $counts['absent']--;
+                
+                // Check undertime/overtime based on pm_out
+                // Undertime: 3:00 PM - 4:59 PM | Normal: 5:00 PM - 6:00 PM | Overtime: 6:01 PM - 7:00 PM
+                if ($r['pm_out']) {
+                    $pmOutTime = new DateTime($r['pm_out']);
+                    $undertimeEnd = new DateTime($r['date'] . ' 16:59:59'); // 4:59:59 PM
+                    $overtimeStart = new DateTime($r['date'] . ' 18:00:01'); // 6:00:01 PM
+                    
+                    if ($pmOutTime <= $undertimeEnd) {
+                        $counts['undertime']++;
+                    } elseif ($pmOutTime > $overtimeStart) {
+                        $counts['overtime']++;
+                    }
                 }
-                if ($r['time_in_status'] === 'Undertime') {
-                    // Count as attended day as well (late time-in)
-                    $counts['absent']--;
-                }
-                if ($r['time_out_status'] === 'Undertime') $counts['undertime']++;
-                if ($r['time_out_status'] === 'Overtime') $counts['overtime']++;
             }
             
             $totalPresent += $counts['present'];
