@@ -161,11 +161,11 @@
     <main class="flex-grow p-4 overflow-y-auto mt-6">
       <div class="bg-white rounded-xl shadow-md p-6 mb-6">
         <div class="flex items-center text-gray-600">
-          <a href="dashboard.html" class="cursor-pointer hover:text-blue-600"
+          <a href="dashboard.php" class="cursor-pointer hover:text-blue-600"
             >Dashboard</a
           >
           <span class="mx-2">&gt;</span>
-          <a href="apply-leave.html" class="cursor-pointer hover:text-blue-600"
+          <a href="apply_leave.php" class="cursor-pointer hover:text-blue-600"
             >Apply for Leave</a
           >
           <span class="mx-2">&gt;</span>
@@ -1444,7 +1444,7 @@
             img.onerror = function () {
               if (candidates.length) img.src = candidates.shift();
               else
-                fetch("/capstone/api/employee_signature.php")
+                fetch("../api/employee_signature.php")
                   .then((r) => r.json())
                   .then((s) => {
                     if (s && s.success && s.hasSignature && s.url) mount(s.url);
@@ -1456,14 +1456,14 @@
           }
           if (sigPath) {
             if (!tryCandidates(sigPath))
-              fetch("/capstone/api/employee_signature.php")
+              fetch("../api/employee_signature.php")
                 .then((r) => r.json())
                 .then((s) => {
                   if (s && s.success && s.hasSignature && s.url) mount(s.url);
                 })
                 .catch(() => {});
           } else {
-            fetch("/capstone/api/employee_signature.php")
+            fetch("../api/employee_signature.php")
               .then((r) => r.json())
               .then((s) => {
                 if (s && s.success && s.hasSignature && s.url) mount(s.url);
@@ -1512,7 +1512,7 @@
           try {
             const localSigData = localStorage.getItem("leaveSignatureData");
             if (!localSigData) {
-              const r = await fetch("/capstone/api/employee_signature.php");
+              const r = await fetch("../api/employee_signature.php");
               const s = await r.json();
               if (s && s.success && s.hasSignature) {
                 const okReuse = confirm(

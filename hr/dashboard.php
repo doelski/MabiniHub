@@ -952,7 +952,7 @@ if (!headers_sent()) {
                         <a href="#"><i class="fas fa-th-large"></i> Dashboard</a>
                     </li>
                     <li class="nav-item">
-                        <a href="employees.html"><i class="fas fa-users"></i> Employees</a>
+                        <a href="employees.php"><i class="fas fa-users"></i> Employees</a>
                     </li>
                     <li class="nav-item">
                         <a href="leave_status.php"><i class="fas fa-calendar-alt"></i> Leave Status</a>

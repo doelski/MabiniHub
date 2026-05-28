@@ -95,17 +95,17 @@ require_role('department_head');
               >
             </li>
             <li style="margin-bottom: 8px">
-              <a href="employees.html"
+              <a href="employees.php"
                 ><i class="fas fa-users"></i> Employees</a
               >
             </li>
             <li style="margin-bottom: 8px">
-              <a href="leave-status.html"
+              <a href="leave-status.php"
                 ><i class="fas fa-calendar-alt"></i> Leave Status</a
               >
             </li>
             <li style="margin-bottom: 8px">
-              <a href="analytics.html" class="text-blue-600 font-semibold"
+              <a href="analytics.php" class="text-blue-600 font-semibold"
                 ><i class="fas fa-chart-pie"></i> Analytics</a
               >
             </li>

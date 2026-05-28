@@ -2503,7 +2503,7 @@ require_role('department_head');
               alert(
                 "Database Error: Missing columns detected.\n\n" +
                   "Please run the database migration:\n" +
-                  "1. Open: http://localhost/capstone/run_migration.php\n" +
+                  "1. Open the Supabase SQL Editor and run the latest database SQL.\n" +
                   "2. Wait for success message\n" +
                   "3. Try saving again\n\n" +
                   "Error details: " +

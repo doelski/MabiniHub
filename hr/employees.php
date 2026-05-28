@@ -760,13 +760,13 @@ foreach ($categories as $cat) {
                         <a href="#"><i class="fas fa-users"></i> Employees</a>
                     </li>
                     <li class="nav-item">
-                        <a href="leave-status.php"><i class="fas fa-calendar-alt"></i> Leave Status</a>
+                        <a href="leave_status.php"><i class="fas fa-calendar-alt"></i> Leave Status</a>
                     </li>
                     <li class="nav-item">
-                        <a href="leave-request.html"><i class="fas fa-calendar-plus"></i> Leave Request</a>
+                        <a href="leave_request.php"><i class="fas fa-calendar-plus"></i> Leave Request</a>
                     </li>
                     <li class="nav-item">
-                        <a href="add-event.html"><i class="fas fa-calendar-plus"></i> Add Event</a>
+                        <a href="manage_events.php"><i class="fas fa-calendar-plus"></i> Manage Events</a>
                     </li>
                 </ul>
             </nav>

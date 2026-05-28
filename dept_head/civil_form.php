@@ -1328,7 +1328,7 @@ if (isset($leave['disapproval_reason3']) && $leave['disapproval_reason3'] !== ''
       }
     }catch(e){}
     // Otherwise navigate back to the dept head leave-request listing (relative path for hosting compatibility)
-    window.location.href = 'leave-request.html';
+    window.location.href = 'leave-request.php';
   }
 </script>
 </html>

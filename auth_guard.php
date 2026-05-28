@@ -134,15 +134,7 @@ function redirect_to_dashboard() {
  * @return string
  */
 function get_base_path() {
-    // Determine how many levels deep we are from root
-    $script_path = $_SERVER['SCRIPT_NAME'];
-    $depth = substr_count(dirname($script_path), '/') - substr_count('/capstone', '/');
-    
-    if ($depth <= 0) {
-        return './';
-    }
-    
-    return str_repeat('../', $depth);
+    return '/';
 }
 
 /**
